@@ -73,10 +73,12 @@ public sealed partial class RuleItemViewModel : ObservableObject
         try
         {
             var frames = Owner.GetFrames(FrameSet ?? string.Empty);
+            var loop = Owner.GetLoopFrames(FrameSet ?? string.Empty);
             var choices = new List<FrameChoice> { FrameChoice.WholeSet };
             for (var i = 0; i < frames.Count; i++)
             {
-                choices.Add(new FrameChoice(i, $"{i + 1}번 프레임", frames[i]));
+                var keyOnly = loop is not null && !loop.Contains(i);
+                choices.Add(new FrameChoice(i, keyOnly ? $"{i + 1}번 프레임 (키 전용)" : $"{i + 1}번 프레임", frames[i]));
             }
 
             if (!choices.SequenceEqual(FrameChoices))

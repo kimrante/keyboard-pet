@@ -70,6 +70,11 @@ dotnet run --project src/KeyboardPet.App
 편집한 목록은 설정에 저장되며(`frames` 배열), 그 뒤 폴더에 새로 넣은 파일은 자동으로 포함되지 않습니다.
 **폴더 순서로 되돌리기**를 누르면 편집을 버리고 폴더의 파일을 파일명 순서로 다시 읽습니다.
 
+**애니메이션 프레임과 키 전용 프레임**: 타일의 체크박스를 풀면 그 프레임은 루프 애니메이션에서 빠지고
+키 매핑의 프레임 선택에서만 쓰입니다(콤보박스에 "키 전용"으로 표시). 예를 들어 4장 중 1~3번만 체크해 두고
+`Enter` → 4번 프레임 규칙을 만들면, 평소에는 1~3번이 반복되고 Enter를 칠 때만 4번이 나타납니다.
+설정에는 `animationFrames` 배열로 저장되며, 생략하면 모든 프레임이 애니메이션에 참여합니다.
+
 ### 키 매핑 규칙
 
 설정 → 키 매핑 탭에서 규칙을 추가합니다. **위에서부터 먼저 맞는 규칙**이 적용되므로
@@ -108,7 +113,9 @@ Enter를 칠 때마다 0.5초 동안 놀란 얼굴이 보였다가 원래 애니
                  "adaptiveSlowMs": 600, "adaptiveFastMs": 80, "adaptiveTargetKeysPerSecond": 6, "adaptiveWindowMs": 2000 },
   "countAutoRepeat": false,
   "startWithWindows": false,
-  "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat", "frames": [ "idle-1.png", "idle-2.png", "blink.png" ] } ],
+  "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat",
+                   "frames": [ "idle-1.png", "idle-2.png", "blink.png" ],
+                   "animationFrames": [ "idle-1.png", "idle-2.png" ] } ],
   "defaultFrameSet": "cat",
   "rules": [
     { "keys": ["Enter"], "frameSet": "jump",   "holdMs": 800, "resetIndex": true },

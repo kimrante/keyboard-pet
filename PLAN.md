@@ -197,6 +197,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 - 규칙은 **위에서부터 첫 매칭 우선**.
 - `holdMs > 0` 이면 해당 시간이 지난 뒤 `defaultFrameSet` 으로 복귀. `0` 이면 다음 규칙 매칭 전까지 유지.
 - `frameIndex`(M7): 값이 있으면 세트를 재생하지 않고 그 프레임 한 장만 정지 표시한다. 엔진은 고정(Pinned) 상태가 되어 스케줄러의 전진을 무시하며, 복귀 시 고정이 풀린다.
+- 루프 프레임(M8): 세트의 `animationFrames`에 든 파일만 루프를 돌고, 나머지(키 전용)는 `frameIndex` 규칙으로만 표시된다. 엔진의 Advance/ResetToFirst는 `FrameSet.LoopFrames` 순서를 따른다.
 - 조합키(Ctrl/Shift/Alt) 지원: 훅에서 modifier 상태를 `GetAsyncKeyState` 로 함께 읽는다.
 - 매칭되지 않는 키는 타수 카운트만 증가시키고 세트는 유지.
 
@@ -267,6 +268,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M6 ✅ 완료(2026-09-22) | 타이핑 속도 연동 모드 | Adaptive 스케줄러(최근 타수 → 간격 보간, 무입력 복귀), 설정 탭·트레이 메뉴 연동, 기본 모드를 타수 기반으로 변경 | 0.5일 |
 | M7 ✅ 완료(2026-09-22) | 프레임 편집 · 단일 프레임 규칙 | 세트 프레임 순서 드래그앤드롭·제외(FrameSetSettings.Frames), 규칙별 특정 프레임 정지 표시(KeyRule.FrameIndex, 엔진 고정 상태) | 0.5일 |
 | R1 ✅ 완료(2026-09-22) | 코드 리뷰 1회 · 최적화 | 정확성 6건 수정(대체 세트 프레임 고정, 조합키 타수 제외, 틱 카운터 랩, 드래그 후보 잔존, DragMove 예외, 최소화 창 복원), 효율 3건(파일 단위 디코딩 캐시, 훅 콜백 경량화, 무이동 클릭 저장 생략), 미사용 필드 제거 | 0.5일 |
+| M8 ✅ 완료(2026-09-22) | 애니메이션 프레임 선택 | 세트별 루프 참여 프레임 지정(FrameSetSettings.AnimationFrames → FrameSet.LoopFrames), 나머지는 키 전용 프레임. 타일 체크박스, 규칙 콤보 "키 전용" 표시 | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

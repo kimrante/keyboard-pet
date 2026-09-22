@@ -10,9 +10,12 @@ using KeyboardPet.Core.Settings;
 namespace KeyboardPet.App.Services;
 
 /// <summary>세트 하나의 로드 결과. UI(설정 창)에서 상태 표시에 쓴다.</summary>
-public sealed record FrameSetStatus(int FrameCount, bool IsBuiltIn, string? Error, int MissingCount = 0)
+/// <param name="LoopCount">루프 애니메이션에 참여하는 프레임 수(전체면 FrameCount와 같음)</param>
+public sealed record FrameSetStatus(int FrameCount, bool IsBuiltIn, string? Error, int MissingCount = 0, int LoopCount = -1)
 {
     public bool HasError => Error is not null;
+
+    public int EffectiveLoopCount => LoopCount < 0 ? FrameCount : LoopCount;
 }
 
 /// <summary>
@@ -92,6 +95,10 @@ public sealed class AnimationService : IDisposable
     public IReadOnlyList<BitmapSource>? TryGetFrames(string name) =>
         _sets.TryGetValue(name, out var set) ? set.Frames : null;
 
+    /// <summary>로드된 세트의 루프 프레임 인덱스 목록. 전체가 루프면 null(세트가 없어도 null).</summary>
+    public IReadOnlyList<int>? TryGetLoopFrames(string name) =>
+        _sets.TryGetValue(name, out var set) ? set.Set.LoopFrames : null;
+
     public void Dispose()
     {
         _settings.Changed -= OnSettingsChanged;
@@ -143,7 +150,7 @@ public sealed class AnimationService : IDisposable
         {
             try
             {
-                var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames);
+                var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames, fs.AnimationFrames);
                 var missing = set.MissingFiles?.Count ?? 0;
                 if (set.Set.IsEmpty)
                 {
@@ -154,7 +161,7 @@ public sealed class AnimationService : IDisposable
                 }
 
                 _sets[fs.Name] = set;
-                _statuses[fs.Name] = new FrameSetStatus(set.Set.FrameCount, false, null, missing);
+                _statuses[fs.Name] = new FrameSetStatus(set.Set.FrameCount, false, null, missing, set.Set.LoopCount);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
             {

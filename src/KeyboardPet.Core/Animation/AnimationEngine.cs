@@ -53,32 +53,41 @@ public sealed class AnimationEngine : IDisposable
         else
         {
             IsPinned = false;
-            FrameIndex = resetIndex || FrameIndex >= set.FrameCount ? 0 : FrameIndex;
+            FrameIndex = resetIndex || FrameIndex >= set.FrameCount ? set.FirstLoopIndex : FrameIndex;
         }
 
         ActiveSetChanged?.Invoke(set);
         FrameChanged?.Invoke(FrameIndex);
     }
 
+    /// <summary>루프의 다음 프레임으로 넘어간다. 고정 중이거나 루프에 넘어갈 프레임이 없으면 아무것도 하지 않는다.</summary>
     public void Advance()
     {
-        if (IsPinned || ActiveSet.FrameCount <= 1)
+        if (IsPinned)
         {
             return;
         }
 
-        FrameIndex = (FrameIndex + 1) % ActiveSet.FrameCount;
+        var next = ActiveSet.NextLoopIndex(FrameIndex);
+        if (next == FrameIndex)
+        {
+            return;
+        }
+
+        FrameIndex = next;
         FrameChanged?.Invoke(FrameIndex);
     }
 
+    /// <summary>루프의 첫 프레임으로 돌아간다(무입력 복귀 등).</summary>
     public void ResetToFirst()
     {
-        if (IsPinned || FrameIndex == 0)
+        var first = ActiveSet.FirstLoopIndex;
+        if (IsPinned || FrameIndex == first)
         {
             return;
         }
 
-        FrameIndex = 0;
+        FrameIndex = first;
         FrameChanged?.Invoke(FrameIndex);
     }
 

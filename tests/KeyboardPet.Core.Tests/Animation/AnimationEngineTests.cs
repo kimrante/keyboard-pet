@@ -117,6 +117,66 @@ public class AnimationEngineTests
     }
 
     [Fact]
+    public void LoopSubset_AdvancesOnlyThroughLoopFrames()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(new FrameSet("s", 4, LoopFrames: new[] { 0, 1, 2 }));
+        var seen = new List<int>();
+        engine.FrameChanged += seen.Add;
+
+        engine.Advance();
+        engine.Advance();
+        engine.Advance();
+        engine.Advance();
+
+        Assert.Equal(new[] { 1, 2, 0, 1 }, seen);
+    }
+
+    [Fact]
+    public void LoopSubset_AfterPinnedKeyOnlyFrame_ReturnsIntoLoop()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        var set = new FrameSet("s", 4, LoopFrames: new[] { 0, 1, 2 });
+        engine.SetActiveSet(set);
+        engine.Advance();                                  // 1
+
+        engine.SetActiveSet(set, resetIndex: true, pinnedFrame: 3);   // 키 전용 프레임 고정
+        Assert.Equal(3, engine.FrameIndex);
+
+        engine.SetActiveSet(set, resetIndex: false);       // 고정 해제, 인덱스 유지(3은 루프 밖)
+        Assert.Equal(3, engine.FrameIndex);
+        engine.Advance();
+        Assert.Equal(0, engine.FrameIndex);                // 루프의 첫 프레임으로 진입
+    }
+
+    [Fact]
+    public void LoopSubset_ResetToFirst_UsesFirstLoopFrame()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(new FrameSet("s", 4, LoopFrames: new[] { 2, 3 }));
+
+        Assert.Equal(2, engine.FrameIndex);
+        engine.Advance();
+        Assert.Equal(3, engine.FrameIndex);
+        engine.ResetToFirst();
+        Assert.Equal(2, engine.FrameIndex);
+    }
+
+    [Fact]
+    public void EmptyLoop_StaysOnFrameZero()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(new FrameSet("s", 3, LoopFrames: Array.Empty<int>()));
+        var changed = 0;
+        engine.FrameChanged += _ => changed++;
+
+        engine.Advance();
+
+        Assert.Equal(0, changed);
+        Assert.Equal(0, engine.FrameIndex);
+    }
+
+    [Fact]
     public void PinnedFrame_ShowsThatFrame_AndIgnoresAdvance()
     {
         var engine = new AnimationEngine(new FakeTimerFactory());

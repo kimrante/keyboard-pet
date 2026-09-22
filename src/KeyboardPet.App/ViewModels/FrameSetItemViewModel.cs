@@ -18,13 +18,20 @@ public sealed partial class FrameEntryViewModel : ObservableObject
     [ObservableProperty]
     private ImageSource? _thumbnail;
 
-    public FrameEntryViewModel(FrameSetItemViewModel owner, string fileName, int number, bool isMissing)
+    /// <summary>true면 루프 애니메이션에 참여, false면 키 매핑 규칙의 단일 프레임 표시로만 쓰인다.</summary>
+    [ObservableProperty]
+    private bool _inAnimation;
+
+    public FrameEntryViewModel(FrameSetItemViewModel owner, string fileName, int number, bool isMissing, bool inAnimation)
     {
         Owner = owner;
         FileName = fileName;
         _number = number;
         IsMissing = isMissing;
+        _inAnimation = inAnimation;
     }
+
+    partial void OnInAnimationChanged(bool value) => Owner.OnAnimationMembershipChanged();
 
     public FrameSetItemViewModel Owner { get; }
 
@@ -66,7 +73,7 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         _name = settings.Name;
         _folder = settings.Folder;
         _hasCustomFrames = settings.Frames is not null;
-        LoadFrames(settings.Frames);
+        LoadFrames(settings.Frames, settings.AnimationFrames);
     }
 
     public SettingsViewModel Owner { get; }
@@ -74,7 +81,14 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
     public ObservableCollection<FrameEntryViewModel> Frames { get; } = new();
 
     public FrameSetSettings ToSettings() =>
-        new(Name, Folder, HasCustomFrames ? Frames.Select(f => f.FileName).ToList() : null);
+        new(
+            Name,
+            Folder,
+            HasCustomFrames ? Frames.Select(f => f.FileName).ToList() : null,
+            Frames.All(f => f.InAnimation) ? null : Frames.Where(f => f.InAnimation).Select(f => f.FileName).ToList());
+
+    /// <summary>타일의 "애니메이션 포함" 체크가 바뀌었을 때.</summary>
+    public void OnAnimationMembershipChanged() => Owner.CommitFrameSets();
 
     public void UpdateStatus(FrameSetStatus? status)
     {
@@ -91,9 +105,20 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         else
         {
             HasError = false;
-            Status = status.MissingCount > 0
-                ? $"{status.FrameCount} 프레임 (없는 파일 {status.MissingCount}개)"
-                : $"{status.FrameCount} 프레임";
+            var parts = new List<string> { $"{status.FrameCount} 프레임" };
+            if (status.EffectiveLoopCount != status.FrameCount)
+            {
+                parts.Add(status.EffectiveLoopCount == 0
+                    ? "애니메이션 프레임 없음 (첫 프레임에 정지)"
+                    : $"애니메이션 {status.EffectiveLoopCount}, 키 전용 {status.FrameCount - status.EffectiveLoopCount}");
+            }
+
+            if (status.MissingCount > 0)
+            {
+                parts.Add($"없는 파일 {status.MissingCount}개");
+            }
+
+            Status = string.Join(" · ", parts);
         }
     }
 
@@ -126,12 +151,12 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         Owner.CommitFrameSets();
     }
 
-    /// <summary>편집을 버리고 폴더의 파일을 자연 정렬 순으로 다시 읽는다(새로 추가된 파일도 포함).</summary>
+    /// <summary>편집(순서·제외·애니메이션 포함)을 버리고 폴더의 파일을 자연 정렬 순으로 다시 읽는다(새로 추가된 파일도 포함).</summary>
     [RelayCommand]
     private void ResetFrames()
     {
         HasCustomFrames = false;
-        LoadFrames(null);
+        LoadFrames(null, null);
         Owner.CommitFrameSets();
     }
 
@@ -140,7 +165,7 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
     partial void OnFolderChanged(string value)
     {
         HasCustomFrames = false;
-        LoadFrames(null);
+        LoadFrames(null, null);
         Owner.CommitFrameSets();
     }
 
@@ -152,17 +177,19 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         }
     }
 
-    private void LoadFrames(IReadOnlyList<string>? explicitFrames)
+    private void LoadFrames(IReadOnlyList<string>? explicitFrames, IReadOnlyList<string>? animationFrames)
     {
         Frames.Clear();
         var folderExists = Directory.Exists(Folder);
         var names = explicitFrames ?? (folderExists ? ImageCache.ListFolderFiles(Folder) : Array.Empty<string>());
+        var animationSet = animationFrames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var number = 0;
         foreach (var name in names)
         {
             var exists = folderExists && File.Exists(Path.Combine(Folder, name));
-            Frames.Add(new FrameEntryViewModel(this, name, ++number, isMissing: !exists));
+            var inAnimation = animationSet is null || animationSet.Contains(name);
+            Frames.Add(new FrameEntryViewModel(this, name, ++number, isMissing: !exists, inAnimation));
         }
 
         LoadThumbnailsAsync();

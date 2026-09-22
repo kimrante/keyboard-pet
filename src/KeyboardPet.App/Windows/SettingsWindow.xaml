@@ -218,12 +218,26 @@
                                                                 </Style>
                                                             </Border.Style>
                                                             <Grid>
+                                                                <!-- 애니메이션에서 뺀(키 전용) 프레임은 흐리게 표시 -->
                                                                 <Image Source="{Binding Thumbnail}" Width="44" Height="44" Margin="0,3,0,0"
-                                                                       VerticalAlignment="Top" Stretch="Uniform" />
+                                                                       VerticalAlignment="Top" Stretch="Uniform">
+                                                                    <Image.Style>
+                                                                        <Style TargetType="Image">
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding InAnimation}" Value="False">
+                                                                                    <Setter Property="Opacity" Value="0.35" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Image.Style>
+                                                                </Image>
                                                                 <TextBlock Text="없음" Foreground="#C0392B" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                            Visibility="{Binding IsMissing, Converter={StaticResource BoolToVis}}" />
                                                                 <TextBlock Text="{Binding Number}" FontSize="10.5" Foreground="#555"
                                                                            HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                                                <CheckBox IsChecked="{Binding InAnimation}" Focusable="False" Margin="2,2,0,0"
+                                                                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                          ToolTip="루프 애니메이션에 포함. 해제하면 키 매핑의 프레임 선택에서만 쓰입니다(키 전용)." />
                                                                 <Button Content="×" Width="16" Height="16" Padding="0" FontSize="11" Focusable="False"
                                                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0"
                                                                         ToolTip="이 프레임 제외"
@@ -264,7 +278,7 @@
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="{Binding BuiltInSummary}" Foreground="#444" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource Hint}"
-                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 편집한 목록은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다. 이름·폴더 입력은 다른 곳을 클릭하면 적용됩니다." />
+                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 타일의 체크를 풀면 그 프레임은 루프 애니메이션에서 빠지고 키 매핑의 프레임 선택에서만 쓰입니다(키 전용). 편집한 내용은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다. 이름·폴더 입력은 다른 곳을 클릭하면 적용됩니다." />
                 </StackPanel>
             </Grid>
         </TabItem>
@@ -474,7 +488,7 @@
                                                   ToolTip="전환할 이미지 세트" />
 
                                         <!-- 프레임 선택: '전체 애니메이션' 또는 특정 프레임 한 장만 정지 표시 -->
-                                        <ComboBox Grid.Column="5" Width="150" Margin="4,0,0,0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
+                                        <ComboBox Grid.Column="5" Width="176" Margin="4,0,0,0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
                                                   ToolTip="세트 전체를 재생할지, 특정 프레임 한 장만 보여줄지">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:FrameChoice}">

@@ -38,6 +38,17 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void FrameSetsEqual_ConsidersAnimationFrames()
+    {
+        var all = new[] { new FrameSetSettings("cat", @"C:\a") };
+        var subset = new[] { new FrameSetSettings("cat", @"C:\a", AnimationFrames: new[] { "1.png" }) };
+        var sameSubset = new[] { new FrameSetSettings("cat", @"C:\a", AnimationFrames: new[] { "1.png" }) };
+
+        Assert.False(AppSettings.FrameSetsEqual(all, subset));
+        Assert.True(AppSettings.FrameSetsEqual(subset, sameSubset));
+    }
+
+    [Fact]
     public void Default_HasBuiltInRules()
     {
         var s = AppSettings.Default;

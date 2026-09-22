@@ -71,8 +71,13 @@ public sealed class ImageCache
     /// <summary>
     /// 폴더의 이미지를 읽는다. <paramref name="frames"/>가 null이면 폴더의 모든 지원 파일을 자연 정렬 순으로,
     /// 값이 있으면 그 파일들만 그 순서대로 읽는다. 없는 파일은 건너뛰고 <see cref="LoadedFrameSet.MissingFiles"/>에 남긴다.
+    /// <paramref name="animationFrames"/>가 주어지면 그 파일들의 프레임만 루프 애니메이션에 참여한다(GIF는 파일 단위로 함께).
     /// </summary>
-    public LoadedFrameSet LoadFolder(string name, string folder, IReadOnlyList<string>? frames = null)
+    public LoadedFrameSet LoadFolder(
+        string name,
+        string folder,
+        IReadOnlyList<string>? frames = null,
+        IReadOnlyList<string>? animationFrames = null)
     {
         if (!Directory.Exists(folder))
         {
@@ -102,17 +107,27 @@ public sealed class ImageCache
             }
         }
 
+        var animationSet = animationFrames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var loop = animationSet is null ? null : new List<int>();
         var bitmaps = new List<BitmapSource>();
         foreach (var file in files)
         {
-            bitmaps.AddRange(GetOrDecodeFile(file));
+            var decoded = GetOrDecodeFile(file);
+            var start = bitmaps.Count;
+            bitmaps.AddRange(decoded);
+
+            if (loop is not null && animationSet!.Contains(Path.GetFileName(file)))
+            {
+                loop.AddRange(Enumerable.Range(start, decoded.Count));
+            }
+
             if (bitmaps.Count >= MaxFramesPerSet)
             {
                 break;
             }
         }
 
-        return Build(name, files, bitmaps, missing);
+        return Build(name, files, bitmaps, missing, loop);
     }
 
     /// <summary>앱에 내장된 리소스(pack URI)로 세트를 만든다.</summary>
@@ -120,7 +135,7 @@ public sealed class ImageCache
     {
         var uris = packUris.ToList();
         var frames = uris.SelectMany(GetOrDecodeResource).ToList();
-        return Build(name, uris, frames, Array.Empty<string>());
+        return Build(name, uris, frames, Array.Empty<string>(), null);
     }
 
     private IReadOnlyList<BitmapSource> GetOrDecodeFile(string path)
@@ -153,14 +168,20 @@ public sealed class ImageCache
         return frames;
     }
 
-    private static LoadedFrameSet Build(string name, IReadOnlyList<string> sources, List<BitmapSource> frames, IReadOnlyList<string> missing)
+    private static LoadedFrameSet Build(
+        string name,
+        IReadOnlyList<string> sources,
+        List<BitmapSource> frames,
+        IReadOnlyList<string> missing,
+        List<int>? loop)
     {
         if (frames.Count > MaxFramesPerSet)
         {
             frames = frames.Take(MaxFramesPerSet).ToList();
         }
 
-        return new LoadedFrameSet(new FrameSet(name, frames.Count, sources), frames, missing);
+        var loopFrames = loop?.Where(i => i < frames.Count).ToList();
+        return new LoadedFrameSet(new FrameSet(name, frames.Count, sources, loopFrames), frames, missing);
     }
 
     private static IEnumerable<BitmapSource> Decode(Uri uri)

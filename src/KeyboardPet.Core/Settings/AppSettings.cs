@@ -38,18 +38,30 @@ public sealed record WindowSettings
 /// 사용자 이미지 세트: 이름과 이미지가 들어 있는 폴더.
 /// <paramref name="Frames"/>가 null이면 폴더의 모든 이미지 파일을 파일명 순서로 쓰고,
 /// 값이 있으면 그 파일들만 그 순서대로 쓴다(설정 창에서 순서 편집·제외한 결과).
+/// <paramref name="AnimationFrames"/>가 null이면 모든 프레임이 루프 애니메이션에 참여하고,
+/// 값이 있으면 그 파일들만 참여한다. 나머지는 키 매핑 규칙의 단일 프레임 표시로만 쓰인다.
 /// </summary>
-public sealed record FrameSetSettings(string Name, string Folder, IReadOnlyList<string>? Frames = null)
+public sealed record FrameSetSettings(
+    string Name,
+    string Folder,
+    IReadOnlyList<string>? Frames = null,
+    IReadOnlyList<string>? AnimationFrames = null)
 {
     public bool HasCustomFrames => Frames is not null;
+
+    public bool HasCustomAnimationFrames => AnimationFrames is not null;
 
     public bool Equals(FrameSetSettings? other) =>
         other is not null
         && Name == other.Name
         && Folder == other.Folder
-        && (Frames is null ? other.Frames is null : other.Frames is not null && Frames.SequenceEqual(other.Frames));
+        && ListsEqual(Frames, other.Frames)
+        && ListsEqual(AnimationFrames, other.AnimationFrames);
 
-    public override int GetHashCode() => HashCode.Combine(Name, Folder, Frames?.Count ?? -1);
+    public override int GetHashCode() => HashCode.Combine(Name, Folder, Frames?.Count ?? -1, AnimationFrames?.Count ?? -1);
+
+    private static bool ListsEqual(IReadOnlyList<string>? a, IReadOnlyList<string>? b) =>
+        a is null ? b is null : b is not null && a.SequenceEqual(b);
 }
 
 /// <summary>
@@ -100,7 +112,8 @@ public sealed record AppSettings
             .Select(f => new FrameSetSettings(
                 f.Name.Trim(),
                 f.Folder.Trim(),
-                f.Frames?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList()))
+                CleanNames(f.Frames),
+                CleanNames(f.AnimationFrames)))
             .ToList(),
         Rules = (Rules ?? Array.Empty<KeyRule>())
             .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.FrameSet))
@@ -113,6 +126,9 @@ public sealed record AppSettings
             })
             .ToList(),
     };
+
+    private static List<string>? CleanNames(IReadOnlyList<string>? names) =>
+        names?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
 
     // 레코드의 기본 동등성은 리스트 속성을 참조로 비교하므로, 부분별 값 비교 도우미를 둔다.
 

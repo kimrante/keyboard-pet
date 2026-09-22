@@ -142,6 +142,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<System.Windows.Media.Imaging.BitmapSource> GetFrames(string setName) =>
         _animation.TryGetFrames(setName) ?? Array.Empty<System.Windows.Media.Imaging.BitmapSource>();
 
+    /// <summary>세트의 루프 프레임 인덱스. 전체가 루프면 null.</summary>
+    public IReadOnlyList<int>? GetLoopFrames(string setName) => _animation.TryGetLoopFrames(setName);
+
     public void CommitRules()
     {
         Push(s => s with { Rules = Rules.Select(r => r.ToRule()).ToList() });
