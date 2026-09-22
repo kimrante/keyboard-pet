@@ -67,6 +67,7 @@ public sealed class TrayService : IDisposable
         TaskbarIcon? taskbarIcon = null;
         try
         {
+            DiagnosticsLog.Trace($"트레이: TaskbarIcon 생성 시도 ({description})");
             taskbarIcon = new TaskbarIcon
             {
                 ToolTipText = "Keyboard Pet",
@@ -80,7 +81,9 @@ public sealed class TrayService : IDisposable
             // 기본값(true)은 SetProcessInformation(ProcessPowerThrottling)을 호출하고 실패하면 예외를 던지는데,
             // Windows 10 일부 환경(1709 미만 빌드, 가상 머신, 정책)에서 이 호출이 실패해 시작 직후 앱이 죽었다.
             // 게다가 프로세스 우선순위를 Idle로 낮춰 애니메이션에도 불리하다.
+            DiagnosticsLog.Trace("트레이: ForceCreate 호출");
             taskbarIcon.ForceCreate(enablesEfficiencyMode: false);
+            DiagnosticsLog.Trace("트레이: 생성 완료");
 
             _icon = taskbarIcon;
             _iconHandle = icon;

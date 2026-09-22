@@ -50,6 +50,7 @@ public partial class PetWindow : Window
 
         SizeChanged += OnSizeChanged;
         SourceInitialized += (_, _) => ApplyClickThrough(_shell.ClickThrough);
+        ContentRendered += (_, _) => DiagnosticsLog.Trace($"펫 창 렌더링 완료: 위치 ({Left:0},{Top:0}) 크기 {ActualWidth:0}x{ActualHeight:0}, 작업 영역 {SystemParameters.WorkArea}");
         _shell.PropertyChanged += OnShellPropertyChanged;
         _settings.Changed += OnSettingsChanged;
 

@@ -19,21 +19,13 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private ServiceProvider? _services;
 
-    public static string AppDataDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet");
-
-    public static IServiceProvider Services =>
-        ((App)Current)._services ?? throw new InvalidOperationException("DI 컨테이너가 아직 초기화되지 않았습니다.");
-
-    protected override void OnStartup(StartupEventArgs e)
+    /// <summary>
+    /// 관리 코드가 실행되는 가장 이른 시점. WPF 초기화(App.xaml 리소스 로드)보다 먼저 실행되므로
+    /// 여기서 startup.log를 만들고 전역 예외 기록을 걸어 둔다. 이 파일조차 없으면 .NET 런타임이 뜨지 못한 것이다.
+    /// </summary>
+    static App()
     {
-        base.OnStartup(e);
-
-        // 모든 경로의 미처리 예외를 crash.log에 남긴다.
-        // - DispatcherUnhandledException: UI 스레드(대부분의 앱 코드)
-        // - AppDomain.UnhandledException: 네이티브 콜백(훅, 창 프로시저)이나 다른 스레드에서 새어 나온 예외
-        // - UnobservedTaskException: 백그라운드 작업(썸네일 디코딩 등)
-        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        DiagnosticsLog.Trace("프로세스 시작 (App 형식 초기화)");
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             DiagnosticsLog.Write("치명적 미처리 예외 (프로세스 종료)", args.ExceptionObject as Exception ?? new Exception(args.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, args) =>
@@ -41,24 +33,52 @@ public partial class App : Application
             DiagnosticsLog.Write("백그라운드 작업 예외", args.Exception);
             args.SetObserved();
         };
+    }
+
+    public static string AppDataDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet");
+
+    public static IServiceProvider Services =>
+        ((App)Current)._services ?? throw new InvalidOperationException("DI 컨테이너가 아직 초기화되지 않았습니다.");
+
+    /// <summary>실행 인수. --no-tray: 트레이 아이콘 생략, --no-hook: 키보드 훅 생략 (문제 원인 분리용).</summary>
+    private static bool HasArg(string name) =>
+        Environment.GetCommandLineArgs().Skip(1).Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        DiagnosticsLog.Trace("OnStartup 진입");
+
+        // UI 스레드 미처리 예외(대부분의 앱 코드). AppDomain/Task 예외는 정적 생성자에서 이미 걸어 두었다.
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out var createdNew);
         if (!createdNew)
         {
-            MessageBox.Show("Keyboard Pet이 이미 실행 중입니다.", "Keyboard Pet",
+            DiagnosticsLog.Trace("다른 인스턴스가 이미 실행 중 → 종료");
+            MessageBox.Show("Keyboard Pet이 이미 실행 중입니다.\n트레이에 아이콘이 없다면 작업 관리자에서 KeyboardPet.exe를 끝낸 뒤 다시 실행하세요.", "Keyboard Pet",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }
 
         _services = ConfigureServices();
+        DiagnosticsLog.Trace("DI 컨테이너 구성 완료");
 
         // 시작 단계는 각각 격리한다. 트레이·훅·자동 실행은 실패해도 앱을 계속 띄우고, 핵심 단계만 종료한다.
         var settings = _services.GetRequiredService<SettingsService>();
         RunStep("설정 읽기", () => settings.Load(), fatal: false);
 
         var tray = _services.GetRequiredService<TrayService>();
-        RunStep("트레이 아이콘", () => tray.Show(), fatal: false);
+        if (HasArg("--no-tray"))
+        {
+            DiagnosticsLog.Trace("--no-tray: 트레이 아이콘 생략");
+        }
+        else
+        {
+            RunStep("트레이 아이콘", () => tray.Show(), fatal: false);
+        }
 
         if (!RunStep("애니메이션 초기화", () => _services.GetRequiredService<AnimationService>().Initialize(), fatal: true)
             || !RunStep("펫 창 표시", () => _services.GetRequiredService<PetWindow>().Show(), fatal: true))
@@ -66,9 +86,18 @@ public partial class App : Application
             return;
         }
 
-        RunStep("키보드 입력 감지", () => _services.GetRequiredService<KeyboardInputService>().Start(), fatal: false,
-            userMessage: "키보드 입력 감지를 시작하지 못했습니다. 펫은 표시되지만 타이핑에 반응하지 않습니다.\n앱을 다시 실행해 보세요.");
+        if (HasArg("--no-hook"))
+        {
+            DiagnosticsLog.Trace("--no-hook: 키보드 훅 생략");
+        }
+        else
+        {
+            RunStep("키보드 입력 감지", () => _services.GetRequiredService<KeyboardInputService>().Start(), fatal: false,
+                userMessage: "키보드 입력 감지를 시작하지 못했습니다. 펫은 표시되지만 타이핑에 반응하지 않습니다.\n앱을 다시 실행해 보세요.");
+        }
+
         RunStep("자동 실행 설정", () => _services.GetRequiredService<StartupService>().Apply(), fatal: false);
+        DiagnosticsLog.Trace("시작 완료");
 
         if (settings.LastLoadError is not null)
         {
@@ -88,6 +117,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        DiagnosticsLog.Trace($"종료 (코드 {e.ApplicationExitCode})");
         // ServiceProvider.Dispose가 IDisposable 싱글턴(훅, 트레이, 엔진, 설정 저장)을 역순으로 정리한다.
         _services?.Dispose();
         _singleInstanceMutex?.Dispose();
@@ -97,9 +127,11 @@ public partial class App : Application
     /// <summary>시작 단계 하나를 실행한다. 실패 시 로그를 남기고, fatal이면 안내 후 종료한다.</summary>
     private bool RunStep(string name, Action action, bool fatal, string? userMessage = null)
     {
+        DiagnosticsLog.Trace($"단계 시작: {name}");
         try
         {
             action();
+            DiagnosticsLog.Trace($"단계 완료: {name}");
             return true;
         }
         catch (Exception ex)

@@ -150,6 +150,14 @@ exe 크기를 줄인 압축 빌드(약 65MB). 대신 실행 중 메모리를 약
 .\scripts\publish.ps1 -FrameworkDependent
 ```
 
+포터블 zip(폴더 형태, 자체 포함). 단일 exe는 첫 실행 때 네이티브 DLL을 `%TEMP%\.net\KeyboardPet\` 아래에 풀어서 쓰는데,
+백신이나 AppLocker, TEMP 실행 제한 정책이 있는 PC에서는 이 단계가 막혀 앱이 조용히 실행되지 않을 수 있습니다.
+그런 PC에서는 zip을 풀어 `KeyboardPet.exe`를 실행하세요:
+
+```powershell
+.\scripts\publish.ps1 -Portable
+```
+
 결과물은 `artifacts\win-x64\` 아래에 생성됩니다. Visual Studio에서는 게시 프로필
 `Properties\PublishProfiles\win-x64-single.pubxml`을 사용할 수 있습니다.
 
@@ -176,5 +184,8 @@ PLAN.md                  개발 계획서와 진행 기록
 - 예기치 않은 오류가 나면 `%LocalAppData%\KeyboardPet\crash.log`에 기록됩니다. 시작 실패, 트레이 생성 실패, 훅 오류 등이 모두 여기에 남으므로 문제를 보고할 때 이 파일을 첨부해 주세요.
 - 트레이 아이콘을 만들 수 없는 환경에서는 트레이 없이 실행되며 안내 창이 뜹니다. 이때 설정과 종료 메뉴는 펫 창을 마우스 오른쪽 버튼으로 눌러 열 수 있습니다.
 - Windows 10에서 시작 직후 "알 수 없는 소프트웨어 예외 (0xe0434352)"가 뜨던 문제는 v1.3.1에서 수정됐습니다(트레이 라이브러리의 효율 모드 호출이 일부 Windows 10 환경에서 실패). v1.3.1 이상으로 업데이트하세요.
+- **시작 진단**: 실행할 때마다 `%LocalAppData%\KeyboardPet\startup.log`가 새로 만들어지며, OS 버전과 시작 단계가 순서대로 기록됩니다. 어느 단계 뒤에서 멈췄는지 이 파일로 알 수 있습니다.
+  - `startup.log`조차 생기지 않으면 .NET 런타임이 뜨기 전에 실패한 것입니다. Windows 10은 1607(2016년 8월) 이상이어야 하며, 단일 exe 대신 **포터블 zip**을 써 보세요. 이벤트 뷰어의 Windows 로그 → 응용 프로그램에서 ".NET Runtime" 또는 "Application Error" 항목도 확인하세요.
+  - 원인 분리용 실행 옵션: `KeyboardPet.exe --no-tray`(트레이 생략), `KeyboardPet.exe --no-hook`(키보드 훅 생략).
 - 절전 복귀나 잠금 해제 후 반응이 없으면 앱이 훅을 자동으로 다시 설치합니다. 그래도 반응이 없으면 앱을 재시작하세요.
 - 설정을 전부 초기화하려면 설정 → 정보 → **모든 설정 기본값으로 복원**을 누르거나 `settings.json`을 삭제하세요.

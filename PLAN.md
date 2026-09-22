@@ -271,6 +271,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M8 ✅ 완료(2026-09-22) | 애니메이션 프레임 선택 | 세트별 루프 참여 프레임 지정(FrameSetSettings.AnimationFrames → FrameSet.LoopFrames), 나머지는 키 전용 프레임. 타일 체크박스, 규칙 콤보 "키 전용" 표시 | 0.5일 |
 | M9 ✅ 완료(2026-09-22) | Bootstrap 스타일 UI · 키보드 아이콘 | Themes/Bootstrap.xaml(버튼·입력·콤보·체크·라디오·슬라이더·탭·카드·컨텍스트 메뉴·툴팁·스크롤바 템플릿)을 App.xaml에 병합, 검은 키보드 app.ico | 0.5일 |
 | R2 ✅ 완료(2026-09-22) | Windows 10 시작 크래시 수정 | H.NotifyIcon ForceCreate의 효율 모드(SetProcessInformation, Idle 우선순위) 비활성화, 트레이 생성 실패 시 대체 아이콘→트레이 없이 실행, 시작 단계별 예외 격리, 훅 콜백 예외 차단, AppDomain/Task 미처리 예외 crash.log 기록, DispatcherUnhandledException Handled 처리, app.ico BMP 항목 재생성 | 0.5일 |
+| R3 ✅ 완료(2026-09-23) | 시작 진단 강화 · 포터블 배포 | 프로세스 시작 직후부터 startup.log 단계 추적(OS·런타임·인수 포함), --no-tray / --no-hook 옵션, 임시 폴더 추출이 없는 포터블 zip 게시(publish.ps1 -Portable) | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

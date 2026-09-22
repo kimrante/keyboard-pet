@@ -72,6 +72,8 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "키보드 훅 설치에 실패했습니다.");
         }
 
+        Services.DiagnosticsLog.Trace("키보드 훅 설치 완료");
+
         if (!_systemEventsSubscribed)
         {
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
