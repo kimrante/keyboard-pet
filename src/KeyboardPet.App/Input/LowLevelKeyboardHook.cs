@@ -149,6 +149,27 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     /// </summary>
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
+        // 네이티브에서 호출되는 콜백이므로 예외가 새어 나가면 프로세스가 즉시 종료된다. 반드시 여기서 막는다.
+        try
+        {
+            ProcessHookMessage(nCode, wParam, lParam);
+        }
+        catch (Exception ex)
+        {
+            if (!_callbackErrorLogged)
+            {
+                _callbackErrorLogged = true;
+                Services.DiagnosticsLog.Write("키보드 훅 콜백 예외 (이후 동일 오류는 기록하지 않음)", ex);
+            }
+        }
+
+        return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+    }
+
+    private bool _callbackErrorLogged;
+
+    private void ProcessHookMessage(int nCode, IntPtr wParam, IntPtr lParam)
+    {
         if (nCode >= 0)
         {
             var message = (int)wParam;
@@ -180,8 +201,6 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
                 _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, isDown.Value, modifiers, isRepeat));
             }
         }
-
-        return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
     }
 
     private static KeyModifiers ReadModifiers()
