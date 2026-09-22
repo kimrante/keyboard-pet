@@ -275,10 +275,10 @@
                             </StackPanel>
 
                             <RadioButton Content="타수 기반" IsChecked="{Binding IsKeystrokeMode}" />
-                            <StackPanel Margin="20,2,0,4" IsEnabled="{Binding IsKeystrokeMode}">
+                            <StackPanel Margin="20,2,0,8" IsEnabled="{Binding IsKeystrokeMode}">
                                 <Grid Style="{StaticResource Row}">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="110" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
@@ -287,19 +287,77 @@
                                             Value="{Binding KeysPerFrame}" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding KeysPerFrame, StringFormat={}{0} 타}" />
                                 </Grid>
+                                <TextBlock Style="{StaticResource Hint}" Text="키를 누를 때만 프레임이 넘어갑니다." />
+                            </StackPanel>
+
+                            <RadioButton Content="타이핑 속도 연동" IsChecked="{Binding IsAdaptiveMode}" />
+                            <StackPanel Margin="20,2,0,4" IsEnabled="{Binding IsAdaptiveMode}">
                                 <Grid Style="{StaticResource Row}">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="110" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Style="{StaticResource RowLabel}" Text="무입력 복귀" />
-                                    <Slider Grid.Column="1" Minimum="0" Maximum="10000" TickFrequency="100" IsSnapToTickEnabled="True"
-                                            Value="{Binding IdleReturnMs}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding IdleReturnMs, StringFormat={}{0} ms}" />
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="느릴 때 간격" />
+                                    <Slider Grid.Column="1" Minimum="16" Maximum="2000" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding AdaptiveSlowMs}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding AdaptiveSlowMs, StringFormat={}{0} ms}" />
                                 </Grid>
-                                <TextBlock Style="{StaticResource Hint}" Text="입력이 이 시간 동안 없으면 첫 프레임으로 돌아갑니다. 0이면 돌아가지 않습니다." />
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="빠를 때 간격" />
+                                    <Slider Grid.Column="1" Minimum="16" Maximum="2000" TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Value="{Binding AdaptiveFastMs}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding AdaptiveFastMs, StringFormat={}{0} ms}" />
+                                </Grid>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="최고 속도 기준" ToolTip="이 타이핑 속도에 도달하면 '빠를 때 간격'이 됩니다" />
+                                    <Slider Grid.Column="1" Minimum="0.5" Maximum="20" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                            Value="{Binding AdaptiveTargetKeysPerSecond}" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource RowValue}" Text="{Binding AdaptiveTargetKeysPerSecond, StringFormat={}{0:0.0} 타/초}" />
+                                        <TextBlock Style="{StaticResource RowValue}" MinWidth="0" Foreground="#666" Text="{Binding AdaptiveTargetPerMinuteText, StringFormat=({0})}" />
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Style="{StaticResource Row}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="측정 구간" ToolTip="최근 이 시간 동안의 타수로 속도를 계산합니다" />
+                                    <Slider Grid.Column="1" Minimum="250" Maximum="10000" TickFrequency="250" IsSnapToTickEnabled="True"
+                                            Value="{Binding AdaptiveWindowMs}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding AdaptiveWindowMs, StringFormat={}{0} ms}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource Hint}" Text="타이핑이 빠를수록 프레임이 빨리 넘어갑니다. 속도 0이면 '느릴 때 간격', 최고 속도 기준 이상이면 '빠를 때 간격'이 됩니다." />
                             </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="무입력 복귀 (타수 기반 · 타이핑 속도 연동)" IsEnabled="{Binding UsesIdleReturn}">
+                        <StackPanel>
+                            <Grid Style="{StaticResource Row}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="복귀까지 시간" />
+                                <Slider Grid.Column="1" Minimum="0" Maximum="10000" TickFrequency="100" IsSnapToTickEnabled="True"
+                                        Value="{Binding IdleReturnMs}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding IdleReturnMs, StringFormat={}{0} ms}" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}" Text="입력이 이 시간 동안 없으면 첫 프레임으로 돌아갑니다. 0이면 돌아가지 않습니다(타이핑 속도 연동에서는 느린 간격으로 계속 움직입니다)." />
                         </StackPanel>
                     </GroupBox>
 

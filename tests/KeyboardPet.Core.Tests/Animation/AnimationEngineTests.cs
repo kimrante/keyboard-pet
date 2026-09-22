@@ -117,6 +117,39 @@ public class AnimationEngineTests
     }
 
     [Fact]
+    public void DefaultMode_IsKeystroke()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(Set(3));
+        engine.Start();
+
+        engine.OnKeystroke();
+
+        Assert.Equal(FrameMode.Keystroke, engine.Options.Mode);
+        Assert.Equal(1, engine.FrameIndex);
+    }
+
+    [Fact]
+    public void AdaptiveMode_KeystrokeThenTick_Advances()
+    {
+        var timers = new FakeTimerFactory();
+        var clock = new FakeClock();
+        var engine = new AnimationEngine(timers, new AnimationOptions { Mode = FrameMode.Adaptive }, clock);
+        engine.SetActiveSet(Set(3));
+        engine.Start();
+
+        timers.Last.Fire();
+        Assert.Equal(0, engine.FrameIndex);   // 입력 전에는 정지
+
+        clock.Advance(100);
+        engine.OnKeystroke();
+        clock.Advance(300);
+        timers.Last.Fire();
+
+        Assert.Equal(1, engine.FrameIndex);
+    }
+
+    [Fact]
     public void Options_AreNormalized()
     {
         var engine = new AnimationEngine(new FakeTimerFactory(), new AnimationOptions
@@ -126,6 +159,10 @@ public class AnimationEngineTests
             RandomMaxMs = 100,
             KeysPerFrame = 0,
             IdleReturnMs = -5,
+            AdaptiveSlowMs = 50,
+            AdaptiveFastMs = 500,
+            AdaptiveTargetKeysPerSecond = 99,
+            AdaptiveWindowMs = 10,
         });
 
         Assert.Equal(AnimationOptions.MinIntervalMs, engine.Options.FixedIntervalMs);
@@ -133,6 +170,10 @@ public class AnimationEngineTests
         Assert.Equal(900, engine.Options.RandomMaxMs);
         Assert.Equal(1, engine.Options.KeysPerFrame);
         Assert.Equal(0, engine.Options.IdleReturnMs);
+        Assert.Equal(500, engine.Options.AdaptiveSlowMs);
+        Assert.Equal(50, engine.Options.AdaptiveFastMs);
+        Assert.Equal(AnimationOptions.MaxTargetKeysPerSecond, engine.Options.AdaptiveTargetKeysPerSecond);
+        Assert.Equal(AnimationOptions.MinWindowMs, engine.Options.AdaptiveWindowMs);
     }
 
     [Fact]

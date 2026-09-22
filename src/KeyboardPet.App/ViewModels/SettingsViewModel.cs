@@ -36,13 +36,17 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     // ── 애니메이션 ──
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFixedMode), nameof(IsRandomMode), nameof(IsKeystrokeMode))]
+    [NotifyPropertyChangedFor(nameof(IsFixedMode), nameof(IsRandomMode), nameof(IsKeystrokeMode), nameof(IsAdaptiveMode), nameof(UsesIdleReturn))]
     private FrameMode _frameMode;
     [ObservableProperty] private int _fixedIntervalMs;
     [ObservableProperty] private int _randomMinMs;
     [ObservableProperty] private int _randomMaxMs;
     [ObservableProperty] private int _keysPerFrame;
     [ObservableProperty] private int _idleReturnMs;
+    [ObservableProperty] private int _adaptiveSlowMs;
+    [ObservableProperty] private int _adaptiveFastMs;
+    [ObservableProperty] private double _adaptiveTargetKeysPerSecond;
+    [ObservableProperty] private int _adaptiveWindowMs;
 
     // ── 이미지 세트 ──
     [ObservableProperty] private string? _defaultFrameSet;
@@ -93,6 +97,18 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         get => FrameMode == FrameMode.Keystroke;
         set { if (value) FrameMode = FrameMode.Keystroke; }
     }
+
+    public bool IsAdaptiveMode
+    {
+        get => FrameMode == FrameMode.Adaptive;
+        set { if (value) FrameMode = FrameMode.Adaptive; }
+    }
+
+    /// <summary>무입력 복귀 설정을 쓰는 모드인지(타수 기반, 타이핑 속도 연동).</summary>
+    public bool UsesIdleReturn => FrameMode is FrameMode.Keystroke or FrameMode.Adaptive;
+
+    /// <summary>목표 속도를 분당 타수로도 보여준다.</summary>
+    public string AdaptiveTargetPerMinuteText => $"{AdaptiveTargetKeysPerSecond * 60:0}타/분";
 
     public string AppVersion =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
@@ -258,6 +274,15 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnRandomMaxMsChanged(int value) => Push(s => s with { Animation = s.Animation with { RandomMaxMs = value } });
     partial void OnKeysPerFrameChanged(int value) => Push(s => s with { Animation = s.Animation with { KeysPerFrame = value } });
     partial void OnIdleReturnMsChanged(int value) => Push(s => s with { Animation = s.Animation with { IdleReturnMs = value } });
+    partial void OnAdaptiveSlowMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveSlowMs = value } });
+    partial void OnAdaptiveFastMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveFastMs = value } });
+    partial void OnAdaptiveWindowMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveWindowMs = value } });
+
+    partial void OnAdaptiveTargetKeysPerSecondChanged(double value)
+    {
+        OnPropertyChanged(nameof(AdaptiveTargetPerMinuteText));
+        Push(s => s with { Animation = s.Animation with { AdaptiveTargetKeysPerSecond = value } });
+    }
 
     partial void OnDefaultFrameSetChanged(string? value)
     {
@@ -298,6 +323,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             RandomMaxMs = s.Animation.RandomMaxMs;
             KeysPerFrame = s.Animation.KeysPerFrame;
             IdleReturnMs = s.Animation.IdleReturnMs;
+            AdaptiveSlowMs = s.Animation.AdaptiveSlowMs;
+            AdaptiveFastMs = s.Animation.AdaptiveFastMs;
+            AdaptiveTargetKeysPerSecond = s.Animation.AdaptiveTargetKeysPerSecond;
+            AdaptiveWindowMs = s.Animation.AdaptiveWindowMs;
 
             var currentSets = FrameSets.Select(f => new FrameSetSettings(f.Name, f.Folder)).ToList();
             if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))

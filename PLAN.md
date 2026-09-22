@@ -83,7 +83,8 @@ KeyboardPet.sln
 │  │  │  ├─ IFrameScheduler.cs     # 프레임 전환 정책 인터페이스
 │  │  │  ├─ FixedIntervalScheduler.cs
 │  │  │  ├─ RandomIntervalScheduler.cs
-│  │  │  └─ KeystrokeScheduler.cs
+│  │  │  ├─ KeystrokeScheduler.cs
+│  │  │  └─ AdaptiveScheduler.cs   # 타이핑 속도 연동(M6)
 │  │  ├─ Input/
 │  │  │  └─ AutoRepeatDetector.cs  # 키 반복(Auto-repeat) 추정 (LL 훅은 반복 여부를 주지 않음)
 │  │  ├─ Rules/
@@ -176,9 +177,10 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 |------|------|-----------|
 | Fixed | 타이머가 `Interval` 마다 `Advance()` | `IntervalMs` (기본 200ms, 범위 16~10000) |
 | Random | 프레임마다 `[MinMs, MaxMs]` 균등 난수로 다음 간격 재산출 | `MinMs`, `MaxMs`, `Seed`(선택) |
-| Keystroke | 키 다운 `N` 회마다 `Advance()`. 타이머 없음 | `KeysPerFrame`(기본 1), `IdleReturnMs`(무입력 시 0번 프레임 복귀, 0이면 비활성) |
+| Keystroke (기본값) | 키 다운 `N` 회마다 `Advance()`. 타이머 없음 | `KeysPerFrame`(기본 1), `IdleReturnMs`(무입력 시 0번 프레임 복귀, 0이면 비활성) |
+| Adaptive | 최근 `WindowMs` 동안의 타수(타/초)로 간격을 `SlowMs`~`FastMs` 사이에서 선형 보간. 무입력 `IdleReturnMs` 후 0번 프레임으로 복귀·정지 | `AdaptiveSlowMs`(600), `AdaptiveFastMs`(80), `AdaptiveTargetKeysPerSecond`(6), `AdaptiveWindowMs`(2000), `IdleReturnMs` 공유 |
 
-- 추후 확장: "Fixed + Keystroke 가속" 혼합 모드(타이핑 속도에 따라 간격 감소)는 v2 후보.
+- "Fixed + Keystroke 가속" 혼합 모드는 M6에서 Adaptive 모드로 구현했다.
 
 #### (d) 키별 이미지 매핑 (RuleMatcher)
 ```json
@@ -261,6 +263,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M3 ✅ 완료(2026-09-22) | 키별 매핑 | RuleMatcher, holdMs 복귀, 조합키 지원 | 1일 |
 | M4 ✅ 완료(2026-09-22) | 설정 UI + 저장 | SettingsWindow 5개 탭, JSON 저장/복원, 즉시 반영 | 2일 |
 | M5 ✅ 완료(2026-09-22) | 마무리 | 자동 시작, DPI/멀티모니터 검증, 단일 exe 배포, 아이콘/샘플 이미지, README | 1일 |
+| M6 ✅ 완료(2026-09-22) | 타이핑 속도 연동 모드 | Adaptive 스케줄러(최근 타수 → 간격 보간, 무입력 복귀), 설정 탭·트레이 메뉴 연동, 기본 모드를 타수 기반으로 변경 | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).
@@ -304,7 +307,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 ---
 
 ## 8. 향후 확장(v2 후보)
-- 타이핑 속도(WPM)에 따라 간격이 자동으로 빨라지는 혼합 모드
+- ~~타이핑 속도(WPM)에 따라 간격이 자동으로 빨라지는 혼합 모드~~ → M6에서 구현
 - 마우스 클릭/스크롤 이벤트 반응
 - 세트를 zip 패키지로 배포/가져오기(커뮤니티 스킨)
 - 다중 펫(창 여러 개) 동시 실행

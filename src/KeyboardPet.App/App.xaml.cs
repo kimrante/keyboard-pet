@@ -75,7 +75,10 @@ public partial class App : Application
         // Core
         services.AddSingleton<IClock, SystemClock>();
         services.AddSingleton<IFrameTimerFactory, DispatcherTimerFactory>();
-        services.AddSingleton<AnimationEngine>();
+        services.AddSingleton(sp => new AnimationEngine(
+            sp.GetRequiredService<IFrameTimerFactory>(),
+            options: null,
+            clock: sp.GetRequiredService<IClock>()));
 
         // Settings
         services.AddSingleton(new SettingsStore(Path.Combine(AppDataDirectory, "settings.json")));

@@ -16,7 +16,7 @@
 | 항상 위 ON/OFF | 트레이 메뉴, 펫 창 우클릭 메뉴, 설정 창 어디서나 토글 |
 | 이미지 세트 | 폴더 하나가 세트 하나. PNG/JPG/BMP/GIF를 파일명 순서대로 프레임으로 사용 (GIF는 프레임 단위로 전개) |
 | 루프 애니메이션 | 마지막 프레임 다음에 첫 프레임으로 돌아갑니다. |
-| 프레임 전환 3가지 | 고정 간격 / 랜덤 간격(최소~최대, 프레임마다 재산출) / 타수 기반(N타마다 1프레임, 무입력 시 첫 프레임 복귀) |
+| 프레임 전환 4가지 | 고정 간격 / 랜덤 간격(최소~최대, 프레임마다 재산출) / **타수 기반**(기본값. N타마다 1프레임, 무입력 시 첫 프레임 복귀) / 타이핑 속도 연동(최근 타수에 따라 간격을 느린 값~빠른 값 사이에서 자동 조절) |
 | 키별 이미지 매핑 | 예: `Enter` → jump 세트를 0.8초, `Ctrl+S` → save 세트, `*`(모든 키) → typing 세트 |
 | 즉시 적용·자동 저장 | 설정 창의 모든 변경이 바로 반영되고 0.5초 뒤 저장됩니다. |
 | 기타 | 배율, 불투명도, 클릭 통과, 타수 표시, Windows 로그인 시 자동 실행 |
@@ -95,8 +95,9 @@ dotnet run --project src/KeyboardPet.App
 {
   "isTopmost": true,
   "window": { "scale": 1.0, "opacity": 1.0, "clickThrough": false, "showCounter": true },
-  "animation": { "mode": "Fixed", "fixedIntervalMs": 200, "randomMinMs": 100, "randomMaxMs": 600,
-                 "keysPerFrame": 1, "idleReturnMs": 2000 },
+  "animation": { "mode": "Keystroke", "fixedIntervalMs": 200, "randomMinMs": 100, "randomMaxMs": 600,
+                 "keysPerFrame": 1, "idleReturnMs": 2000,
+                 "adaptiveSlowMs": 600, "adaptiveFastMs": 80, "adaptiveTargetKeysPerSecond": 6, "adaptiveWindowMs": 2000 },
   "countAutoRepeat": false,
   "startWithWindows": false,
   "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat" } ],

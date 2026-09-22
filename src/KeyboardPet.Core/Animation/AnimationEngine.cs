@@ -9,12 +9,14 @@ namespace KeyboardPet.Core.Animation;
 public sealed class AnimationEngine : IDisposable
 {
     private readonly IFrameTimerFactory _timers;
+    private readonly IClock _clock;
     private IFrameScheduler? _scheduler;
     private bool _isRunning;
 
-    public AnimationEngine(IFrameTimerFactory timers, AnimationOptions? options = null)
+    public AnimationEngine(IFrameTimerFactory timers, AnimationOptions? options = null, IClock? clock = null)
     {
         _timers = timers;
+        _clock = clock ?? new SystemClock();
         Options = (options ?? new AnimationOptions()).Normalized();
         _scheduler = CreateScheduler(Options);
     }
@@ -113,6 +115,17 @@ public sealed class AnimationEngine : IDisposable
 
         FrameMode.Keystroke => new KeystrokeScheduler(
             _timers, o.KeysPerFrame, TimeSpan.FromMilliseconds(o.IdleReturnMs), Advance, ResetToFirst),
+
+        FrameMode.Adaptive => new AdaptiveScheduler(
+            _timers,
+            _clock,
+            TimeSpan.FromMilliseconds(o.AdaptiveSlowMs),
+            TimeSpan.FromMilliseconds(o.AdaptiveFastMs),
+            o.AdaptiveTargetKeysPerSecond,
+            TimeSpan.FromMilliseconds(o.AdaptiveWindowMs),
+            TimeSpan.FromMilliseconds(o.IdleReturnMs),
+            Advance,
+            ResetToFirst),
 
         _ => throw new ArgumentOutOfRangeException(nameof(o), o.Mode, "알 수 없는 프레임 모드"),
     };

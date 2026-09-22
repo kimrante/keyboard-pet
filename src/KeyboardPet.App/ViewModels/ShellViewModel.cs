@@ -47,8 +47,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool _showCounter = true;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFixedMode), nameof(IsRandomMode), nameof(IsKeystrokeMode))]
-    private FrameMode _frameMode = FrameMode.Fixed;
+    [NotifyPropertyChangedFor(nameof(IsFixedMode), nameof(IsRandomMode), nameof(IsKeystrokeMode), nameof(IsAdaptiveMode))]
+    private FrameMode _frameMode = FrameMode.Keystroke;
 
     public ShellViewModel(SettingsService settings, IServiceProvider services)
     {
@@ -71,6 +71,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public bool IsRandomMode => FrameMode == FrameMode.Random;
 
     public bool IsKeystrokeMode => FrameMode == FrameMode.Keystroke;
+
+    public bool IsAdaptiveMode => FrameMode == FrameMode.Adaptive;
 
     public void Dispose()
     {

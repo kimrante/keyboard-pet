@@ -22,13 +22,14 @@ public static class ContextMenuFactory
         return menu;
     }
 
-    /// <summary>M4 설정창 전까지 모드를 바꿔볼 수 있는 임시 하위 메뉴.</summary>
+    /// <summary>프레임 전환 방식을 빠르게 바꾸는 하위 메뉴. 세부 값은 설정 창에서 조정한다.</summary>
     private static MenuItem BuildModeMenu(ShellViewModel shell)
     {
         var mode = new MenuItem { Header = "애니메이션 모드(_M)" };
-        mode.Items.Add(ModeItem("고정 간격 (200ms)", FrameMode.Fixed, nameof(ShellViewModel.IsFixedMode), shell));
-        mode.Items.Add(ModeItem("랜덤 간격 (100~600ms)", FrameMode.Random, nameof(ShellViewModel.IsRandomMode), shell));
-        mode.Items.Add(ModeItem("타수 (1타/프레임, 2초 무입력 시 복귀)", FrameMode.Keystroke, nameof(ShellViewModel.IsKeystrokeMode), shell));
+        mode.Items.Add(ModeItem("고정 간격", FrameMode.Fixed, nameof(ShellViewModel.IsFixedMode), shell));
+        mode.Items.Add(ModeItem("랜덤 간격", FrameMode.Random, nameof(ShellViewModel.IsRandomMode), shell));
+        mode.Items.Add(ModeItem("타수 기반", FrameMode.Keystroke, nameof(ShellViewModel.IsKeystrokeMode), shell));
+        mode.Items.Add(ModeItem("타이핑 속도 연동", FrameMode.Adaptive, nameof(ShellViewModel.IsAdaptiveMode), shell));
         return mode;
     }
 
