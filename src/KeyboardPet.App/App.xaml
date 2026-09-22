@@ -3,6 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Bootstrap 5 스타일 테마: 설정 창, 컨텍스트 메뉴, 툴팁 등 앱 전체에 적용 -->
+                <ResourceDictionary Source="Themes/Bootstrap.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -11,6 +11,7 @@
         Width="860" Height="620"
         MinWidth="780" MinHeight="480"
         WindowStartupLocation="CenterScreen"
+        Background="White"
         FontFamily="Segoe UI, Malgun Gothic"
         FontSize="13">
 
@@ -18,7 +19,7 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
         <Style x:Key="Hint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#666" />
+            <Setter Property="Foreground" Value="#6C757D" />
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Margin" Value="0,4,0,0" />
@@ -39,17 +40,13 @@
             </Style.Triggers>
         </Style>
 
-        <Style TargetType="GroupBox">
-            <Setter Property="Margin" Value="0,0,0,12" />
-            <Setter Property="Padding" Value="10,6,10,8" />
+        <!-- 테마(Bootstrap.xaml)의 암시적 스타일을 유지하면서 간격만 조정 -->
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Margin" Value="0,5,0,5" />
         </Style>
 
-        <Style TargetType="CheckBox">
-            <Setter Property="Margin" Value="0,4,0,4" />
-        </Style>
-
-        <Style TargetType="RadioButton">
-            <Setter Property="Margin" Value="0,6,0,2" />
+        <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
+            <Setter Property="Margin" Value="0,8,0,4" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
@@ -69,18 +66,21 @@
             <Setter Property="TextAlignment" Value="Right" />
         </Style>
 
-        <Style x:Key="SmallButton" TargetType="Button">
-            <Setter Property="Padding" Value="8,2" />
+        <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource BsSmallButton}">
             <Setter Property="Margin" Value="4,0,0,0" />
-            <Setter Property="MinWidth" Value="0" />
         </Style>
 
+        <Style x:Key="SmallDangerButton" TargetType="Button" BasedOn="{StaticResource BsSmallDangerButton}">
+            <Setter Property="Margin" Value="4,0,0,0" />
+        </Style>
+
+        <!-- card 형태의 목록 행 -->
         <Style x:Key="ItemCard" TargetType="Border">
-            <Setter Property="BorderBrush" Value="#DDD" />
+            <Setter Property="BorderBrush" Value="#DEE2E6" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="8" />
-            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10" />
+            <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Background" Value="White" />
         </Style>
     </Window.Resources>
@@ -124,7 +124,7 @@
                             </Grid>
 
                             <Button Content="위치 초기화 (작업 영역 우하단으로)" Command="{Binding ResetPositionCommand}"
-                                    HorizontalAlignment="Left" Padding="10,3" Margin="0,6,0,0" />
+                                    HorizontalAlignment="Left" Margin="0,8,0,0" />
                         </StackPanel>
                     </GroupBox>
 
@@ -155,7 +155,7 @@
                 </Grid.RowDefinitions>
 
                 <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
-                    <Button DockPanel.Dock="Left" Content="폴더 추가..." Command="{Binding AddFrameSetCommand}" Padding="10,3" />
+                    <Button DockPanel.Dock="Left" Content="폴더 추가..." Style="{StaticResource BsPrimaryButton}" Command="{Binding AddFrameSetCommand}" />
                     <ComboBox DockPanel.Dock="Right" Width="180" ItemsSource="{Binding AvailableSetNames}"
                               SelectedItem="{Binding DefaultFrameSet}" VerticalAlignment="Center" />
                     <TextBlock DockPanel.Dock="Right" Text="기본 세트:" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -182,7 +182,7 @@
                                         <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Folder}" ToolTip="이미지가 들어 있는 폴더" />
                                         <Button Grid.Row="0" Grid.Column="2" Content="찾아보기..." Style="{StaticResource SmallButton}"
                                                 Command="{Binding Owner.BrowseFrameSetFolderCommand}" CommandParameter="{Binding}" />
-                                        <Button Grid.Row="0" Grid.Column="3" Content="삭제" Style="{StaticResource SmallButton}"
+                                        <Button Grid.Row="0" Grid.Column="3" Content="삭제" Style="{StaticResource SmallDangerButton}"
                                                 Command="{Binding Owner.RemoveFrameSetCommand}" CommandParameter="{Binding}" />
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" Margin="0,6,0,0">
@@ -195,7 +195,7 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type vm:FrameEntryViewModel}">
-                                                        <Border Width="56" Height="64" Margin="0,0,4,4" BorderThickness="1" CornerRadius="3"
+                                                        <Border Width="58" Height="66" Margin="0,0,6,6" BorderThickness="1" CornerRadius="6"
                                                                 AllowDrop="True" Cursor="SizeAll" ToolTip="{Binding FileName}"
                                                                 PreviewMouseLeftButtonDown="FrameTile_PreviewMouseLeftButtonDown"
                                                                 PreviewMouseLeftButtonUp="FrameTile_PreviewMouseLeftButtonUp"
@@ -204,15 +204,15 @@
                                                                 Drop="FrameTile_Drop">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
-                                                                    <Setter Property="BorderBrush" Value="#DDD" />
-                                                                    <Setter Property="Background" Value="#FAFAFA" />
+                                                                    <Setter Property="BorderBrush" Value="#DEE2E6" />
+                                                                    <Setter Property="Background" Value="#F8F9FA" />
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                                                                            <Setter Property="BorderBrush" Value="#E57373" />
-                                                                            <Setter Property="Background" Value="#FFF5F5" />
+                                                                            <Setter Property="BorderBrush" Value="#DC3545" />
+                                                                            <Setter Property="Background" Value="#F8D7DA" />
                                                                         </DataTrigger>
                                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                                            <Setter Property="BorderBrush" Value="#3A7BD5" />
+                                                                            <Setter Property="BorderBrush" Value="#86B7FE" />
                                                                         </Trigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -238,8 +238,8 @@
                                                                 <CheckBox IsChecked="{Binding InAnimation}" Focusable="False" Margin="2,2,0,0"
                                                                           HorizontalAlignment="Left" VerticalAlignment="Top"
                                                                           ToolTip="루프 애니메이션에 포함. 해제하면 키 매핑의 프레임 선택에서만 쓰입니다(키 전용)." />
-                                                                <Button Content="×" Width="16" Height="16" Padding="0" FontSize="11" Focusable="False"
-                                                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0"
+                                                                <Button Content="×" Style="{StaticResource BsCloseButton}" Focusable="False"
+                                                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,2,0"
                                                                         ToolTip="이 프레임 제외"
                                                                         Command="{Binding Owner.RemoveFrameCommand}" CommandParameter="{Binding}" />
                                                             </Grid>
@@ -432,7 +432,7 @@
                 </Grid.RowDefinitions>
 
                 <DockPanel Grid.Row="0" Margin="0,0,0,8">
-                    <Button DockPanel.Dock="Left" Content="규칙 추가" Command="{Binding AddRuleCommand}" Padding="10,3" Margin="0,0,10,0" />
+                    <Button DockPanel.Dock="Left" Content="규칙 추가" Style="{StaticResource BsPrimaryButton}" Command="{Binding AddRuleCommand}" Margin="0,0,12,0" />
                     <TextBlock Style="{StaticResource Hint}" Margin="0" VerticalAlignment="Center"
                                Text="위에서부터 먼저 맞는 규칙이 적용됩니다. 키는 쉼표로 여러 개 적을 수 있고, * 는 모든 키(조합키 단독 제외)입니다. 프레임을 고르면 그 키를 누를 때 해당 프레임 한 장만 유지 시간 동안 표시됩니다." />
                 </DockPanel>
@@ -459,9 +459,9 @@
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,6,0">
-                                            <Button Content="▲" Style="{StaticResource SmallButton}" Margin="0" Padding="5,2" ToolTip="위로"
+                                            <Button Content="▲" Style="{StaticResource SmallButton}" Margin="0" Padding="7,3" ToolTip="위로"
                                                     Command="{Binding Owner.MoveRuleUpCommand}" CommandParameter="{Binding}" />
-                                            <Button Content="▼" Style="{StaticResource SmallButton}" Margin="2,0,0,0" Padding="5,2" ToolTip="아래로"
+                                            <Button Content="▼" Style="{StaticResource SmallButton}" Margin="3,0,0,0" Padding="7,3" ToolTip="아래로"
                                                     Command="{Binding Owner.MoveRuleDownCommand}" CommandParameter="{Binding}" />
                                         </StackPanel>
 
@@ -477,6 +477,8 @@
                                                         <DataTrigger Binding="{Binding Owner.IsCapturing}" Value="True">
                                                             <Setter Property="Content" Value="키를 누르세요…" />
                                                             <Setter Property="Background" Value="#FFF3CD" />
+                                                            <Setter Property="BorderBrush" Value="#FFC107" />
+                                                            <Setter Property="Foreground" Value="#664D03" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -501,13 +503,13 @@
                                         </ComboBox>
 
                                         <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="10,0,0,0">
-                                            <TextBox Text="{Binding HoldMs}" Width="56" TextAlignment="Right" ToolTip="유지 시간(ms). 0이면 다른 규칙이 맞을 때까지 유지" />
+                                            <TextBox Text="{Binding HoldMs}" Width="80" TextAlignment="Right" ToolTip="유지 시간(ms). 0이면 다른 규칙이 맞을 때까지 유지" />
                                             <TextBlock Text="ms" VerticalAlignment="Center" Margin="3,0,8,0" />
                                             <CheckBox Content="처음부터" IsChecked="{Binding ResetIndex}" Margin="0" VerticalAlignment="Center"
                                                       ToolTip="전환할 때 첫 프레임부터 다시 재생 (전체 애니메이션일 때만 의미 있음)" />
                                         </StackPanel>
 
-                                        <Button Grid.Column="7" Content="삭제" Style="{StaticResource SmallButton}" Margin="10,0,0,0"
+                                        <Button Grid.Column="7" Content="삭제" Style="{StaticResource SmallDangerButton}" Margin="10,0,0,0"
                                                 Command="{Binding Owner.RemoveRuleCommand}" CommandParameter="{Binding}" />
 
                                         <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8" Style="{StaticResource ErrorText}" Text="{Binding Error}" />
@@ -532,8 +534,8 @@
         <TabItem Header="정보">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="12">
-                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="Keyboard Pet" />
-                    <TextBlock Text="{Binding AppVersion, StringFormat=버전 {0}}" Foreground="#666" Margin="0,2,0,12" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="Keyboard Pet" />
+                    <TextBlock Text="{Binding AppVersion, StringFormat=버전 {0}}" Foreground="#6C757D" Margin="0,2,0,14" />
 
                     <GroupBox Header="개인정보">
                         <TextBlock Text="{Binding PrivacyNotice}" TextWrapping="Wrap" />
@@ -543,8 +545,8 @@
                         <StackPanel>
                             <TextBlock Text="{Binding SettingsFilePath}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" />
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button Content="폴더 열기" Command="{Binding OpenSettingsFolderCommand}" Padding="10,3" />
-                                <Button Content="모든 설정 기본값으로 복원" Command="{Binding RestoreDefaultsCommand}" Padding="10,3" Margin="8,0,0,0" />
+                                <Button Content="폴더 열기" Command="{Binding OpenSettingsFolderCommand}" />
+                                <Button Content="모든 설정 기본값으로 복원" Style="{StaticResource BsDangerButton}" Command="{Binding RestoreDefaultsCommand}" Margin="8,0,0,0" />
                             </StackPanel>
                             <TextBlock Style="{StaticResource ErrorText}" Text="{Binding LoadError}" />
                             <TextBlock Style="{StaticResource Hint}" Text="{Binding StatusMessage}" />
