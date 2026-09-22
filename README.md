@@ -66,6 +66,10 @@ dotnet run --project src/KeyboardPet.App
 같은 이름으로 세트를 추가하면 내장 세트를 대체합니다.
 투명 배경 PNG를 권장하며, 표시 크기는 원본 픽셀 × 배율입니다(이미지 파일의 DPI 정보는 무시).
 
+**프레임 순서 편집과 제외**: 세트 행의 썸네일 타일을 드래그해 순서를 바꾸고, 타일의 × 로 특정 프레임을 제외할 수 있습니다.
+편집한 목록은 설정에 저장되며(`frames` 배열), 그 뒤 폴더에 새로 넣은 파일은 자동으로 포함되지 않습니다.
+**폴더 순서로 되돌리기**를 누르면 편집을 버리고 폴더의 파일을 파일명 순서로 다시 읽습니다.
+
 ### 키 매핑 규칙
 
 설정 → 키 매핑 탭에서 규칙을 추가합니다. **위에서부터 먼저 맞는 규칙**이 적용되므로
@@ -75,8 +79,12 @@ dotnet run --project src/KeyboardPet.App
 |------|------|
 | 키 | 쉼표로 여러 개. `Enter`, `Ctrl+S`, `Ctrl+Shift+A`, `*`(모든 키, 조합키 단독 제외) |
 | 세트 | 전환할 이미지 세트 |
+| 프레임 | "전체 애니메이션"이면 세트를 재생하고, 특정 프레임을 고르면 그 한 장만 정지 표시합니다(`frameIndex`, 0부터) |
 | 유지(ms) | 이 시간이 지나면 기본 세트로 복귀. 0이면 다른 규칙이 맞을 때까지 유지 |
-| 처음부터 | 전환할 때 첫 프레임부터 다시 재생 |
+| 처음부터 | 전환할 때 첫 프레임부터 다시 재생 (전체 애니메이션일 때만 의미 있음) |
+
+예를 들어 기본 세트의 3번 프레임이 "놀란 얼굴"이라면, `Enter` → 기본 세트 · 3번 프레임 · 500ms 규칙을 두면
+Enter를 칠 때마다 0.5초 동안 놀란 얼굴이 보였다가 원래 애니메이션으로 돌아갑니다.
 
 조합키를 쓰지 않은 규칙(`A`)은 Shift로 대문자를 쳐도 반응하고, 조합키를 명시한 규칙(`Ctrl+S`)은 조합 상태가
 정확히 같을 때만 반응합니다. **키 캡처** 버튼을 누른 뒤 원하는 키를 누르면 이름을 몰라도 추가할 수 있습니다.
@@ -100,10 +108,11 @@ dotnet run --project src/KeyboardPet.App
                  "adaptiveSlowMs": 600, "adaptiveFastMs": 80, "adaptiveTargetKeysPerSecond": 6, "adaptiveWindowMs": 2000 },
   "countAutoRepeat": false,
   "startWithWindows": false,
-  "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat" } ],
+  "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat", "frames": [ "idle-1.png", "idle-2.png", "blink.png" ] } ],
   "defaultFrameSet": "cat",
   "rules": [
     { "keys": ["Enter"], "frameSet": "jump",   "holdMs": 800, "resetIndex": true },
+    { "keys": ["Space"], "frameSet": "cat",    "holdMs": 400, "resetIndex": true, "frameIndex": 2 },
     { "keys": ["*"],     "frameSet": "typing", "holdMs": 600, "resetIndex": false }
   ]
 }

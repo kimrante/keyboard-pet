@@ -10,7 +10,7 @@ using KeyboardPet.Core.Settings;
 namespace KeyboardPet.App.Services;
 
 /// <summary>세트 하나의 로드 결과. UI(설정 창)에서 상태 표시에 쓴다.</summary>
-public sealed record FrameSetStatus(int FrameCount, bool IsBuiltIn, string? Error)
+public sealed record FrameSetStatus(int FrameCount, bool IsBuiltIn, string? Error, int MissingCount = 0)
 {
     public bool HasError => Error is not null;
 }
@@ -82,6 +82,10 @@ public sealed class AnimationService : IDisposable
         _engine.OnKeystroke();
     }
 
+    /// <summary>로드된 세트의 디코딩 프레임(설정 창의 프레임 선택 미리보기용). 없으면 null.</summary>
+    public IReadOnlyList<BitmapSource>? TryGetFrames(string name) =>
+        _sets.TryGetValue(name, out var set) ? set.Frames : null;
+
     public void Dispose()
     {
         _settings.Changed -= OnSettingsChanged;
@@ -102,7 +106,7 @@ public sealed class AnimationService : IDisposable
         else if (!AppSettings.RulesEqual(old.Rules, @new.Rules))
         {
             ConfigureRules(@new.Rules);
-            SetActive(DefaultSetName, resetIndex: true);
+            ShowDefault();
             Reloaded?.Invoke();
         }
 
@@ -117,7 +121,7 @@ public sealed class AnimationService : IDisposable
         LoadSets(s.FrameSets);
         DefaultSetName = _sets.ContainsKey(s.DefaultFrameSet) ? s.DefaultFrameSet : AppSettings.BuiltInDefaultSet;
         ConfigureRules(s.Rules);
-        SetActive(DefaultSetName, resetIndex: true);
+        ShowDefault();
         Reloaded?.Invoke();
     }
 
@@ -130,15 +134,18 @@ public sealed class AnimationService : IDisposable
         {
             try
             {
-                var set = _cache.LoadFolder(fs.Name, fs.Folder);
+                var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames);
+                var missing = set.MissingFiles?.Count ?? 0;
                 if (set.Set.IsEmpty)
                 {
-                    _statuses[fs.Name] = new FrameSetStatus(0, false, "폴더에 지원하는 이미지 파일이 없습니다.");
+                    _statuses[fs.Name] = new FrameSetStatus(0, false,
+                        fs.Frames is null ? "폴더에 지원하는 이미지 파일이 없습니다." : "남은 프레임이 없습니다. 폴더 순서로 되돌리거나 파일을 확인하세요.",
+                        missing);
                     continue;
                 }
 
                 _sets[fs.Name] = set;
-                _statuses[fs.Name] = new FrameSetStatus(set.Set.FrameCount, false, null);
+                _statuses[fs.Name] = new FrameSetStatus(set.Set.FrameCount, false, null, missing);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
             {
@@ -168,14 +175,18 @@ public sealed class AnimationService : IDisposable
         foreach (var rule in rules)
         {
             index++;
-            if (_sets.ContainsKey(rule.FrameSet))
-            {
-                usable.Add(rule);
-            }
-            else
+            if (!_sets.TryGetValue(rule.FrameSet, out var set))
             {
                 errors.Add($"규칙 #{index}: 세트 '{rule.FrameSet}'이(가) 없어 무시합니다.");
+                continue;
             }
+
+            if (rule.FrameIndex is int frame && frame >= set.Set.FrameCount)
+            {
+                errors.Add($"규칙 #{index}: 세트 '{rule.FrameSet}'에 {frame + 1}번 프레임이 없어 마지막 프레임을 사용합니다.");
+            }
+
+            usable.Add(rule);
         }
 
         var matcher = new RuleMatcher(usable);
@@ -187,18 +198,20 @@ public sealed class AnimationService : IDisposable
         }
 
         _rules = new KeyRuleController(_timers, matcher, DefaultSetName);
-        _rules.ActiveSetChanged += SetActive;
+        _rules.ActiveSetChanged += Show;
     }
 
-    private void SetActive(string name, bool resetIndex)
+    private void ShowDefault() => Show(new ActiveSetRequest(DefaultSetName, true));
+
+    private void Show(ActiveSetRequest request)
     {
-        if (!_sets.TryGetValue(name, out var set) && !_sets.TryGetValue(DefaultSetName, out set))
+        if (!_sets.TryGetValue(request.FrameSet, out var set) && !_sets.TryGetValue(DefaultSetName, out set))
         {
             set = _sets[AppSettings.BuiltInDefaultSet];
         }
 
         _active = set;
-        _engine.SetActiveSet(set.Set, resetIndex);
+        _engine.SetActiveSet(set.Set, request.ResetIndex, request.FrameIndex);
     }
 
     private void OnFrameChanged(int index)

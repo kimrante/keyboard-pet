@@ -34,8 +34,23 @@ public sealed record WindowSettings
     };
 }
 
-/// <summary>사용자 이미지 세트: 이름과 이미지가 들어 있는 폴더.</summary>
-public sealed record FrameSetSettings(string Name, string Folder);
+/// <summary>
+/// 사용자 이미지 세트: 이름과 이미지가 들어 있는 폴더.
+/// <paramref name="Frames"/>가 null이면 폴더의 모든 이미지 파일을 파일명 순서로 쓰고,
+/// 값이 있으면 그 파일들만 그 순서대로 쓴다(설정 창에서 순서 편집·제외한 결과).
+/// </summary>
+public sealed record FrameSetSettings(string Name, string Folder, IReadOnlyList<string>? Frames = null)
+{
+    public bool HasCustomFrames => Frames is not null;
+
+    public bool Equals(FrameSetSettings? other) =>
+        other is not null
+        && Name == other.Name
+        && Folder == other.Folder
+        && (Frames is null ? other.Frames is null : other.Frames is not null && Frames.SequenceEqual(other.Frames));
+
+    public override int GetHashCode() => HashCode.Combine(Name, Folder, Frames?.Count ?? -1);
+}
 
 /// <summary>
 /// 앱 전체 설정. 불변 레코드이며 변경은 with 식으로 새 인스턴스를 만든다.
@@ -82,7 +97,10 @@ public sealed record AppSettings
         DefaultFrameSet = string.IsNullOrWhiteSpace(DefaultFrameSet) ? BuiltInDefaultSet : DefaultFrameSet.Trim(),
         FrameSets = (FrameSets ?? Array.Empty<FrameSetSettings>())
             .Where(f => f is not null && !string.IsNullOrWhiteSpace(f.Name) && !string.IsNullOrWhiteSpace(f.Folder))
-            .Select(f => new FrameSetSettings(f.Name.Trim(), f.Folder.Trim()))
+            .Select(f => new FrameSetSettings(
+                f.Name.Trim(),
+                f.Folder.Trim(),
+                f.Frames?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList()))
             .ToList(),
         Rules = (Rules ?? Array.Empty<KeyRule>())
             .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.FrameSet))
@@ -91,6 +109,7 @@ public sealed record AppSettings
                 Keys = (r.Keys ?? Array.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).ToList(),
                 FrameSet = r.FrameSet.Trim(),
                 HoldMs = Math.Max(0, r.HoldMs),
+                FrameIndex = r.FrameIndex is < 0 ? null : r.FrameIndex,
             })
             .ToList(),
     };
@@ -106,7 +125,7 @@ public sealed record AppSettings
             var x = a[i];
             var y = b[i];
             if (x.FrameSet != y.FrameSet || x.HoldMs != y.HoldMs || x.ResetIndex != y.ResetIndex
-                || !x.Keys.SequenceEqual(y.Keys))
+                || x.FrameIndex != y.FrameIndex || !x.Keys.SequenceEqual(y.Keys))
             {
                 return false;
             }

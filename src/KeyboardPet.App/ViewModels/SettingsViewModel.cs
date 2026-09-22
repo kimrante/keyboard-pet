@@ -135,11 +135,12 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public void CommitFrameSets()
     {
-        Push(s => s with
-        {
-            FrameSets = FrameSets.Select(f => new FrameSetSettings(f.Name, f.Folder)).ToList(),
-        });
+        Push(s => s with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() });
     }
+
+    /// <summary>로드된 세트의 프레임 비트맵(규칙의 프레임 선택 미리보기용). 로드되지 않았으면 빈 목록.</summary>
+    public IReadOnlyList<System.Windows.Media.Imaging.BitmapSource> GetFrames(string setName) =>
+        _animation.TryGetFrames(setName) ?? Array.Empty<System.Windows.Media.Imaging.BitmapSource>();
 
     public void CommitRules()
     {
@@ -163,7 +164,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         var name = UniqueSetName(Path.GetFileName(dialog.FolderName.TrimEnd(Path.DirectorySeparatorChar)));
-        FrameSets.Add(new FrameSetItemViewModel(this, name, dialog.FolderName));
+        FrameSets.Add(new FrameSetItemViewModel(this, new FrameSetSettings(name, dialog.FolderName)));
         CommitFrameSets();
     }
 
@@ -328,13 +329,13 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             AdaptiveTargetKeysPerSecond = s.Animation.AdaptiveTargetKeysPerSecond;
             AdaptiveWindowMs = s.Animation.AdaptiveWindowMs;
 
-            var currentSets = FrameSets.Select(f => new FrameSetSettings(f.Name, f.Folder)).ToList();
+            var currentSets = FrameSets.Select(f => f.ToSettings()).ToList();
             if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
             {
                 FrameSets.Clear();
                 foreach (var fs in s.FrameSets)
                 {
-                    FrameSets.Add(new FrameSetItemViewModel(this, fs.Name, fs.Folder));
+                    FrameSets.Add(new FrameSetItemViewModel(this, fs));
                 }
             }
 
@@ -394,6 +395,12 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         RuleErrorsText = string.Join(Environment.NewLine, _animation.RuleErrors);
+
+        // 세트가 다시 로드되면 규칙 행의 프레임 목록(썸네일)도 새 프레임으로 갱신한다.
+        foreach (var rule in Rules)
+        {
+            rule.Revalidate();
+        }
 
         var builtIns = _animation.SetStatuses
             .Where(kv => kv.Value.IsBuiltIn)

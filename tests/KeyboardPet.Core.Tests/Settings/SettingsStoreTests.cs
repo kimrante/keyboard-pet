@@ -43,12 +43,17 @@ public sealed class SettingsStoreTests : IDisposable
             StartWithWindows = true,
             Window = new WindowSettings { X = 100.5, Y = 200, Scale = 1.5, Opacity = 0.8, ClickThrough = true, ShowCounter = false },
             Animation = new AnimationOptions { Mode = FrameMode.Random, RandomMinMs = 50, RandomMaxMs = 900, KeysPerFrame = 3, IdleReturnMs = 1500, FixedIntervalMs = 333 },
-            FrameSets = new[] { new FrameSetSettings("cat", @"C:\pets\cat"), new FrameSetSettings("dog", @"C:\pets\dog") },
+            FrameSets = new[]
+            {
+                new FrameSetSettings("cat", @"C:\pets\cat", new[] { "c.png", "a.png" }),
+                new FrameSetSettings("dog", @"C:\pets\dog"),
+            },
             DefaultFrameSet = "cat",
             Rules = new[]
             {
                 new KeyRule(new[] { "Enter", "Ctrl+S" }, "dog", HoldMs: 500, ResetIndex: false),
                 new KeyRule("*", "cat", HoldMs: 0, ResetIndex: true),
+                new KeyRule("Space", "cat", HoldMs: 300, ResetIndex: true, FrameIndex: 1),
             },
         };
 
@@ -62,8 +67,29 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(original.Window, loaded.Window);
         Assert.Equal(original.Animation, loaded.Animation);
         Assert.True(AppSettings.FrameSetsEqual(original.FrameSets, loaded.FrameSets));
+        Assert.Equal(new[] { "c.png", "a.png" }, loaded.FrameSets[0].Frames);
+        Assert.Null(loaded.FrameSets[1].Frames);
         Assert.Equal("cat", loaded.DefaultFrameSet);
         Assert.True(AppSettings.RulesEqual(original.Rules, loaded.Rules));
+        Assert.Equal(1, loaded.Rules[2].FrameIndex);
+        Assert.Null(loaded.Rules[0].FrameIndex);
+    }
+
+    [Fact]
+    public void Load_NegativeFrameIndex_BecomesNull_AndBlankFrameEntriesAreDropped()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """
+            {
+              "frameSets": [ { "name": "cat", "folder": "C:\\c", "frames": [ " a.png ", "", "b.png" ] } ],
+              "rules": [ { "keys": ["A"], "frameSet": "cat", "frameIndex": -1 } ]
+            }
+            """);
+
+        var s = new SettingsStore(FilePath).Load();
+
+        Assert.Equal(new[] { "a.png", "b.png" }, s.FrameSets[0].Frames);
+        Assert.Null(s.Rules[0].FrameIndex);
     }
 
     [Fact]

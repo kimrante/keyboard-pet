@@ -196,6 +196,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 ```
 - 규칙은 **위에서부터 첫 매칭 우선**.
 - `holdMs > 0` 이면 해당 시간이 지난 뒤 `defaultFrameSet` 으로 복귀. `0` 이면 다음 규칙 매칭 전까지 유지.
+- `frameIndex`(M7): 값이 있으면 세트를 재생하지 않고 그 프레임 한 장만 정지 표시한다. 엔진은 고정(Pinned) 상태가 되어 스케줄러의 전진을 무시하며, 복귀 시 고정이 풀린다.
 - 조합키(Ctrl/Shift/Alt) 지원: 훅에서 modifier 상태를 `GetAsyncKeyState` 로 함께 읽는다.
 - 매칭되지 않는 키는 타수 카운트만 증가시키고 세트는 유지.
 
@@ -226,7 +227,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
   "fixed":     { "intervalMs": 200 },
   "random":    { "minMs": 100, "maxMs": 600 },
   "keystroke": { "keysPerFrame": 1, "idleReturnMs": 2000, "countAutoRepeat": false },
-  "frameSets": [
+  "frameSets": [   // frames(M7): 생략하면 폴더 전체를 파일명 순, 지정하면 그 파일만 그 순서로
     { "name": "idle",  "folder": "C:\\pets\\cat\\idle" },
     { "name": "jump",  "folder": "C:\\pets\\cat\\jump" }
   ],
@@ -264,6 +265,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M4 ✅ 완료(2026-09-22) | 설정 UI + 저장 | SettingsWindow 5개 탭, JSON 저장/복원, 즉시 반영 | 2일 |
 | M5 ✅ 완료(2026-09-22) | 마무리 | 자동 시작, DPI/멀티모니터 검증, 단일 exe 배포, 아이콘/샘플 이미지, README | 1일 |
 | M6 ✅ 완료(2026-09-22) | 타이핑 속도 연동 모드 | Adaptive 스케줄러(최근 타수 → 간격 보간, 무입력 복귀), 설정 탭·트레이 메뉴 연동, 기본 모드를 타수 기반으로 변경 | 0.5일 |
+| M7 ✅ 완료(2026-09-22) | 프레임 편집 · 단일 프레임 규칙 | 세트 프레임 순서 드래그앤드롭·제외(FrameSetSettings.Frames), 규칙별 특정 프레임 정지 표시(KeyRule.FrameIndex, 엔진 고정 상태) | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

@@ -29,22 +29,40 @@ public sealed class AnimationEngine : IDisposable
 
     public bool IsRunning => _isRunning;
 
+    /// <summary>단일 프레임 고정 상태. 고정 중에는 스케줄러가 전진을 요청해도 프레임이 바뀌지 않는다.</summary>
+    public bool IsPinned { get; private set; }
+
     /// <summary>프레임 인덱스가 바뀔 때(세트 교체 포함) 발생. 인자는 새 인덱스.</summary>
     public event Action<int>? FrameChanged;
 
     public event Action<FrameSet>? ActiveSetChanged;
 
-    public void SetActiveSet(FrameSet set, bool resetIndex = true)
+    /// <summary>
+    /// 활성 세트를 바꾼다. <paramref name="pinnedFrame"/>이 주어지면 그 프레임 한 장에 고정하고
+    /// 애니메이션을 멈춘다(범위를 벗어나면 마지막 프레임으로 보정). null이면 고정을 풀고 애니메이션한다.
+    /// </summary>
+    public void SetActiveSet(FrameSet set, bool resetIndex = true, int? pinnedFrame = null)
     {
         ActiveSet = set;
-        FrameIndex = resetIndex || FrameIndex >= set.FrameCount ? 0 : FrameIndex;
+
+        if (pinnedFrame is int pin && set.FrameCount > 0)
+        {
+            IsPinned = true;
+            FrameIndex = Math.Clamp(pin, 0, set.FrameCount - 1);
+        }
+        else
+        {
+            IsPinned = false;
+            FrameIndex = resetIndex || FrameIndex >= set.FrameCount ? 0 : FrameIndex;
+        }
+
         ActiveSetChanged?.Invoke(set);
         FrameChanged?.Invoke(FrameIndex);
     }
 
     public void Advance()
     {
-        if (ActiveSet.FrameCount <= 1)
+        if (IsPinned || ActiveSet.FrameCount <= 1)
         {
             return;
         }
@@ -55,7 +73,7 @@ public sealed class AnimationEngine : IDisposable
 
     public void ResetToFirst()
     {
-        if (FrameIndex == 0)
+        if (IsPinned || FrameIndex == 0)
         {
             return;
         }

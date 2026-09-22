@@ -117,6 +117,46 @@ public class AnimationEngineTests
     }
 
     [Fact]
+    public void PinnedFrame_ShowsThatFrame_AndIgnoresAdvance()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(Set(4));
+        var seen = new List<int>();
+        engine.FrameChanged += seen.Add;
+
+        engine.SetActiveSet(Set(4), resetIndex: true, pinnedFrame: 2);
+        engine.Advance();
+        engine.ResetToFirst();
+
+        Assert.True(engine.IsPinned);
+        Assert.Equal(2, engine.FrameIndex);
+        Assert.Equal(new[] { 2 }, seen);
+    }
+
+    [Fact]
+    public void PinnedFrame_OutOfRange_ClampsToLast()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+
+        engine.SetActiveSet(Set(3), pinnedFrame: 99);
+
+        Assert.Equal(2, engine.FrameIndex);
+    }
+
+    [Fact]
+    public void SetActiveSet_WithoutPin_Unpins()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(Set(4), pinnedFrame: 3);
+
+        engine.SetActiveSet(Set(4), resetIndex: true);
+        engine.Advance();
+
+        Assert.False(engine.IsPinned);
+        Assert.Equal(1, engine.FrameIndex);
+    }
+
+    [Fact]
     public void DefaultMode_IsKeystroke()
     {
         var engine = new AnimationEngine(new FakeTimerFactory());

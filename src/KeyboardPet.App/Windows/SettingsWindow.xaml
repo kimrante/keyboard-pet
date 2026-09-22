@@ -8,8 +8,8 @@
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
         Title="Keyboard Pet 설정"
         Icon="pack://application:,,,/Assets/app.ico"
-        Width="720" Height="600"
-        MinWidth="640" MinHeight="480"
+        Width="860" Height="620"
+        MinWidth="780" MinHeight="480"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI, Malgun Gothic"
         FontSize="13">
@@ -185,33 +185,73 @@
                                         <Button Grid.Row="0" Grid.Column="3" Content="삭제" Style="{StaticResource SmallButton}"
                                                 Command="{Binding Owner.RemoveFrameSetCommand}" CommandParameter="{Binding}" />
 
-                                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,6,0,0">
-                                            <ItemsControl ItemsSource="{Binding Thumbnails}">
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" Margin="0,6,0,0">
+                                            <!-- 프레임 타일: 드래그로 순서 변경, × 로 제외. 이벤트는 코드비하인드(SettingsWindow.xaml.cs)에서 처리 -->
+                                            <ItemsControl ItemsSource="{Binding Frames}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Horizontal" />
+                                                        <WrapPanel />
                                                     </ItemsPanelTemplate>
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border BorderBrush="#EEE" BorderThickness="1" Margin="0,0,4,0" Background="#FAFAFA">
-                                                            <Image Source="{Binding}" Width="40" Height="40" Stretch="Uniform" />
+                                                    <DataTemplate DataType="{x:Type vm:FrameEntryViewModel}">
+                                                        <Border Width="56" Height="64" Margin="0,0,4,4" BorderThickness="1" CornerRadius="3"
+                                                                AllowDrop="True" Cursor="SizeAll" ToolTip="{Binding FileName}"
+                                                                PreviewMouseLeftButtonDown="FrameTile_PreviewMouseLeftButtonDown"
+                                                                PreviewMouseMove="FrameTile_PreviewMouseMove"
+                                                                DragOver="FrameTile_DragOver"
+                                                                Drop="FrameTile_Drop">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="BorderBrush" Value="#DDD" />
+                                                                    <Setter Property="Background" Value="#FAFAFA" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="#E57373" />
+                                                                            <Setter Property="Background" Value="#FFF5F5" />
+                                                                        </DataTrigger>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="#3A7BD5" />
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Grid>
+                                                                <Image Source="{Binding Thumbnail}" Width="44" Height="44" Margin="0,3,0,0"
+                                                                       VerticalAlignment="Top" Stretch="Uniform" />
+                                                                <TextBlock Text="없음" Foreground="#C0392B" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Visibility="{Binding IsMissing, Converter={StaticResource BoolToVis}}" />
+                                                                <TextBlock Text="{Binding Number}" FontSize="10.5" Foreground="#555"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,2" />
+                                                                <Button Content="×" Width="16" Height="16" Padding="0" FontSize="11" Focusable="False"
+                                                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0"
+                                                                        ToolTip="이 프레임 제외"
+                                                                        Command="{Binding Owner.RemoveFrameCommand}" CommandParameter="{Binding}" />
+                                                            </Grid>
                                                         </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
-                                            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11.5">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="#666" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding HasError}" Value="True">
-                                                                <Setter Property="Foreground" Value="#C0392B" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+
+                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="11.5">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#666" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasError}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#C0392B" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Text="· 순서 편집됨" Foreground="#3A7BD5" FontSize="11.5" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Visibility="{Binding HasCustomFrames, Converter={StaticResource BoolToVis}}" />
+                                                <Button Content="폴더 순서로 되돌리기" Style="{StaticResource SmallButton}" Margin="10,0,0,0" FontSize="11.5"
+                                                        Command="{Binding ResetFramesCommand}"
+                                                        Visibility="{Binding HasCustomFrames, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -223,7 +263,7 @@
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="{Binding BuiltInSummary}" Foreground="#444" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource Hint}"
-                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다. 이름·폴더 입력은 다른 곳을 클릭하면 적용됩니다." />
+                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 편집한 목록은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다. 이름·폴더 입력은 다른 곳을 클릭하면 적용됩니다." />
                 </StackPanel>
             </Grid>
         </TabItem>
@@ -379,7 +419,7 @@
                 <DockPanel Grid.Row="0" Margin="0,0,0,8">
                     <Button DockPanel.Dock="Left" Content="규칙 추가" Command="{Binding AddRuleCommand}" Padding="10,3" Margin="0,0,10,0" />
                     <TextBlock Style="{StaticResource Hint}" Margin="0" VerticalAlignment="Center"
-                               Text="위에서부터 먼저 맞는 규칙이 적용됩니다. 키는 쉼표로 여러 개 적을 수 있고, * 는 모든 키(조합키 단독 제외)입니다." />
+                               Text="위에서부터 먼저 맞는 규칙이 적용됩니다. 키는 쉼표로 여러 개 적을 수 있고, * 는 모든 키(조합키 단독 제외)입니다. 프레임을 고르면 그 키를 누를 때 해당 프레임 한 장만 유지 시간 동안 표시됩니다." />
                 </DockPanel>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -395,6 +435,7 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
@@ -428,19 +469,33 @@
                                         </Button>
 
                                         <TextBlock Grid.Column="3" Text="→" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                        <ComboBox Grid.Column="4" Width="120" ItemsSource="{Binding Owner.AvailableSetNames}" SelectedItem="{Binding FrameSet}" />
+                                        <ComboBox Grid.Column="4" Width="100" ItemsSource="{Binding Owner.AvailableSetNames}" SelectedItem="{Binding FrameSet}"
+                                                  ToolTip="전환할 이미지 세트" />
 
-                                        <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="10,0,0,0">
+                                        <!-- 프레임 선택: '전체 애니메이션' 또는 특정 프레임 한 장만 정지 표시 -->
+                                        <ComboBox Grid.Column="5" Width="150" Margin="4,0,0,0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
+                                                  ToolTip="세트 전체를 재생할지, 특정 프레임 한 장만 보여줄지">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:FrameChoice}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="{Binding Thumbnail}" Width="20" Height="20" Margin="0,0,5,0" Stretch="Uniform" />
+                                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+
+                                        <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="10,0,0,0">
                                             <TextBox Text="{Binding HoldMs}" Width="56" TextAlignment="Right" ToolTip="유지 시간(ms). 0이면 다른 규칙이 맞을 때까지 유지" />
                                             <TextBlock Text="ms" VerticalAlignment="Center" Margin="3,0,8,0" />
                                             <CheckBox Content="처음부터" IsChecked="{Binding ResetIndex}" Margin="0" VerticalAlignment="Center"
-                                                      ToolTip="전환할 때 첫 프레임부터 다시 재생" />
+                                                      ToolTip="전환할 때 첫 프레임부터 다시 재생 (전체 애니메이션일 때만 의미 있음)" />
                                         </StackPanel>
 
-                                        <Button Grid.Column="6" Content="삭제" Style="{StaticResource SmallButton}" Margin="10,0,0,0"
+                                        <Button Grid.Column="7" Content="삭제" Style="{StaticResource SmallButton}" Margin="10,0,0,0"
                                                 Command="{Binding Owner.RemoveRuleCommand}" CommandParameter="{Binding}" />
 
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="7" Style="{StaticResource ErrorText}" Text="{Binding Error}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8" Style="{StaticResource ErrorText}" Text="{Binding Error}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
