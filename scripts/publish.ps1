@@ -61,7 +61,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($Portable) {
-    $version = ([xml](Get-Content $project)).Project.PropertyGroup.Version | Select-Object -First 1
+    $version = (Select-String -Path $project -Pattern '<Version>(.+?)</Version>' -Encoding UTF8 | Select-Object -First 1).Matches[0].Groups[1].Value
     $zip = Join-Path $root "artifacts\KeyboardPet-$version-$Runtime-portable.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
     Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zip -CompressionLevel Optimal
