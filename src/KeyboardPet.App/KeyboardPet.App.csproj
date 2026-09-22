@@ -11,7 +11,7 @@
     <AssemblyName>KeyboardPet</AssemblyName>
     <RootNamespace>KeyboardPet.App</RootNamespace>
 
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Product>Keyboard Pet</Product>
     <AssemblyTitle>Keyboard Pet</AssemblyTitle>
     <Description>키보드 입력에 반응하는 데스크톱 펫 애니메이션</Description>
