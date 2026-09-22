@@ -117,7 +117,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnShowCounterChanged(bool value) => Push(s => s with { Window = s.Window with { ShowCounter = value } });
 
-    partial void OnFrameModeChanged(FrameMode value) => Push(s => s with { Animation = s.Animation with { Mode = value } });
+    partial void OnFrameModeChanged(FrameMode value) =>
+        Push(s => s.WithEffectiveAnimation(s.EffectiveAnimation with { Mode = value }));
 
     private void Push(Func<AppSettings, AppSettings> mutate)
     {
@@ -139,7 +140,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             Opacity = s.Window.Opacity;
             ClickThrough = s.Window.ClickThrough;
             ShowCounter = s.Window.ShowCounter;
-            FrameMode = s.Animation.Mode;
+            FrameMode = s.EffectiveAnimation.Mode;
         }
         finally
         {

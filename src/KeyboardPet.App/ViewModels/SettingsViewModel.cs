@@ -61,6 +61,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// <summary>현재 내장 세트로 대체되고 있는 이름들의 요약. 예: "idle (4프레임), jump (2프레임)"</summary>
     [ObservableProperty] private string _builtInSummary = string.Empty;
 
+    /// <summary>애니메이션·키 매핑 탭이 어느 세트의 프로필을 편집 중인지.</summary>
+    [ObservableProperty] private string _profileTargetText = string.Empty;
+
     public SettingsViewModel(SettingsService settings, AnimationService animation, IKeyboardSource keyboard)
     {
         _settings = settings;
@@ -135,7 +138,22 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public void CommitFrameSets()
     {
-        Push(s => s with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() });
+        var renames = FrameSets
+            .Where(f => !string.Equals(f.CommittedName, f.Name, StringComparison.OrdinalIgnoreCase))
+            .Select(f => (Old: f.CommittedName, New: f.Name))
+            .ToList();
+
+        Push(s =>
+        {
+            // 이름이 바뀐 세트는 프로필과 기본 세트 참조도 따라가게 한다.
+            var next = renames.Aggregate(s, (acc, r) => acc.WithSetRenamed(r.Old, r.New));
+            return next with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() };
+        });
+
+        foreach (var item in FrameSets)
+        {
+            item.CommittedName = item.Name;
+        }
     }
 
     /// <summary>로드된 세트의 프레임 비트맵(규칙의 프레임 선택 미리보기용). 로드되지 않았으면 빈 목록.</summary>
@@ -145,9 +163,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// <summary>세트의 루프 프레임 인덱스. 전체가 루프면 null.</summary>
     public IReadOnlyList<int>? GetLoopFrames(string setName) => _animation.TryGetLoopFrames(setName);
 
+    /// <summary>규칙은 현재 기본 세트의 프로필에 저장된다.</summary>
     public void CommitRules()
     {
-        Push(s => s with { Rules = Rules.Select(r => r.ToRule()).ToList() });
+        Push(s => s.WithEffectiveRules(Rules.Select(r => r.ToRule()).ToList()));
     }
 
     // ── 명령: 일반 ──
@@ -176,6 +195,37 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     {
         FrameSets.Remove(item);
         CommitFrameSets();
+    }
+
+    /// <summary>폴더 없이 빈 세트를 만든다. 앱 관리 폴더를 만들어 두고, 이미지는 카드에 끌어다 넣는다.</summary>
+    [RelayCommand]
+    private void AddEmptySet()
+    {
+        try
+        {
+            var name = UniqueSetName("새 세트");
+            var folder = UniqueManagedFolder(name);
+            Directory.CreateDirectory(folder);
+            FrameSets.Add(new FrameSetItemViewModel(this, new FrameSetSettings(name, folder)));
+            CommitFrameSets();
+            StatusMessage = $"'{name}' 세트를 만들었습니다. 이미지 파일을 카드에 끌어다 놓으면 {folder} 에 복사됩니다.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            DiagnosticsLog.Write("빈 세트 만들기 실패", ex);
+            StatusMessage = $"세트 폴더를 만들지 못했습니다: {ex.Message}";
+        }
+    }
+
+    private static string UniqueManagedFolder(string name)
+    {
+        var folder = Path.Combine(ManagedSetsRoot, name);
+        for (var i = 2; Directory.Exists(folder); i++)
+        {
+            folder = Path.Combine(ManagedSetsRoot, $"{name}-{i}");
+        }
+
+        return folder;
     }
 
     /// <summary>앱이 관리하는 세트 폴더. 드래그앤드롭으로 가져온 파일은 이 아래에 복사된다.</summary>
@@ -240,12 +290,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         var parent = Path.GetFileName(Path.GetDirectoryName(files[0])?.TrimEnd(Path.DirectorySeparatorChar) ?? string.Empty);
         var name = UniqueSetName(string.IsNullOrWhiteSpace(parent) ? "set" : parent);
 
-        var folder = Path.Combine(ManagedSetsRoot, name);
-        for (var i = 2; Directory.Exists(folder); i++)
-        {
-            folder = Path.Combine(ManagedSetsRoot, $"{name}-{i}");
-        }
-
+        var folder = UniqueManagedFolder(name);
         Directory.CreateDirectory(folder);
         var item = new FrameSetItemViewModel(this, new FrameSetSettings(name, folder));
         FrameSets.Add(item);
@@ -348,27 +393,32 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnStartWithWindowsChanged(bool value) => Push(s => s with { StartWithWindows = value });
     partial void OnCountAutoRepeatChanged(bool value) => Push(s => s with { CountAutoRepeat = value });
 
-    partial void OnFrameModeChanged(FrameMode value) => Push(s => s with { Animation = s.Animation with { Mode = value } });
-    partial void OnFixedIntervalMsChanged(int value) => Push(s => s with { Animation = s.Animation with { FixedIntervalMs = value } });
-    partial void OnRandomMinMsChanged(int value) => Push(s => s with { Animation = s.Animation with { RandomMinMs = value } });
-    partial void OnRandomMaxMsChanged(int value) => Push(s => s with { Animation = s.Animation with { RandomMaxMs = value } });
-    partial void OnKeysPerFrameChanged(int value) => Push(s => s with { Animation = s.Animation with { KeysPerFrame = value } });
-    partial void OnIdleReturnMsChanged(int value) => Push(s => s with { Animation = s.Animation with { IdleReturnMs = value } });
-    partial void OnAdaptiveSlowMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveSlowMs = value } });
-    partial void OnAdaptiveFastMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveFastMs = value } });
-    partial void OnAdaptiveWindowMsChanged(int value) => Push(s => s with { Animation = s.Animation with { AdaptiveWindowMs = value } });
+    // 애니메이션 옵션은 현재 기본 세트의 프로필에 기록된다.
+    private void PushAnimation(Func<AnimationOptions, AnimationOptions> mutate) =>
+        Push(s => s.WithEffectiveAnimation(mutate(s.EffectiveAnimation)));
+
+    partial void OnFrameModeChanged(FrameMode value) => PushAnimation(a => a with { Mode = value });
+    partial void OnFixedIntervalMsChanged(int value) => PushAnimation(a => a with { FixedIntervalMs = value });
+    partial void OnRandomMinMsChanged(int value) => PushAnimation(a => a with { RandomMinMs = value });
+    partial void OnRandomMaxMsChanged(int value) => PushAnimation(a => a with { RandomMaxMs = value });
+    partial void OnKeysPerFrameChanged(int value) => PushAnimation(a => a with { KeysPerFrame = value });
+    partial void OnIdleReturnMsChanged(int value) => PushAnimation(a => a with { IdleReturnMs = value });
+    partial void OnAdaptiveSlowMsChanged(int value) => PushAnimation(a => a with { AdaptiveSlowMs = value });
+    partial void OnAdaptiveFastMsChanged(int value) => PushAnimation(a => a with { AdaptiveFastMs = value });
+    partial void OnAdaptiveWindowMsChanged(int value) => PushAnimation(a => a with { AdaptiveWindowMs = value });
 
     partial void OnAdaptiveTargetKeysPerSecondChanged(double value)
     {
         OnPropertyChanged(nameof(AdaptiveTargetPerMinuteText));
-        Push(s => s with { Animation = s.Animation with { AdaptiveTargetKeysPerSecond = value } });
+        PushAnimation(a => a with { AdaptiveTargetKeysPerSecond = value });
     }
 
     partial void OnDefaultFrameSetChanged(string? value)
     {
         if (!string.IsNullOrEmpty(value))
         {
-            Push(s => s with { DefaultFrameSet = value });
+            // 프로필이 없는 세트로 바꾸면 지금 설정을 복사해 시작한다(설정이 갑자기 초기화되지 않도록).
+            Push(s => s.WithDefaultFrameSet(value));
         }
     }
 
@@ -397,16 +447,19 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             StartWithWindows = s.StartWithWindows;
             CountAutoRepeat = s.CountAutoRepeat;
 
-            FrameMode = s.Animation.Mode;
-            FixedIntervalMs = s.Animation.FixedIntervalMs;
-            RandomMinMs = s.Animation.RandomMinMs;
-            RandomMaxMs = s.Animation.RandomMaxMs;
-            KeysPerFrame = s.Animation.KeysPerFrame;
-            IdleReturnMs = s.Animation.IdleReturnMs;
-            AdaptiveSlowMs = s.Animation.AdaptiveSlowMs;
-            AdaptiveFastMs = s.Animation.AdaptiveFastMs;
-            AdaptiveTargetKeysPerSecond = s.Animation.AdaptiveTargetKeysPerSecond;
-            AdaptiveWindowMs = s.Animation.AdaptiveWindowMs;
+            var animation = s.EffectiveAnimation;
+            FrameMode = animation.Mode;
+            FixedIntervalMs = animation.FixedIntervalMs;
+            RandomMinMs = animation.RandomMinMs;
+            RandomMaxMs = animation.RandomMaxMs;
+            KeysPerFrame = animation.KeysPerFrame;
+            IdleReturnMs = animation.IdleReturnMs;
+            AdaptiveSlowMs = animation.AdaptiveSlowMs;
+            AdaptiveFastMs = animation.AdaptiveFastMs;
+            AdaptiveTargetKeysPerSecond = animation.AdaptiveTargetKeysPerSecond;
+            AdaptiveWindowMs = animation.AdaptiveWindowMs;
+
+            ProfileTargetText = $"세트 '{s.DefaultFrameSet}'의 설정을 편집 중입니다. 기본 세트를 바꾸면 그 세트에 저장된 설정으로 전환됩니다.";
 
             var currentSets = FrameSets.Select(f => f.ToSettings()).ToList();
             if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
@@ -422,10 +475,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             DefaultFrameSet = s.DefaultFrameSet;
 
             var currentRules = Rules.Select(r => r.ToRule()).ToList();
-            if (!AppSettings.RulesEqual(currentRules, s.Rules))
+            var effectiveRules = s.EffectiveRules;
+            if (!AppSettings.RulesEqual(currentRules, effectiveRules))
             {
                 Rules.Clear();
-                foreach (var rule in s.Rules)
+                foreach (var rule in effectiveRules)
                 {
                     Rules.Add(new RuleItemViewModel(this, rule));
                 }

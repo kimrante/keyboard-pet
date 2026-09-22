@@ -87,10 +87,14 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         _folder = settings.Folder;
         _hasCustomFrames = settings.Frames is not null;
         _idleFrameName = settings.IdleFrame;
+        CommittedName = settings.Name;
         LoadFrames(settings.Frames, settings.AnimationFrames);
     }
 
     public SettingsViewModel Owner { get; }
+
+    /// <summary>마지막으로 설정에 저장된 이름. 이름이 바뀌면 세트 프로필과 기본 세트 참조를 옮기는 데 쓴다.</summary>
+    public string CommittedName { get; set; }
 
     public ObservableCollection<FrameEntryViewModel> Frames { get; } = new();
 
@@ -125,6 +129,13 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         {
             HasError = true;
             Status = status.Error!;
+        }
+        else if (status.FrameCount == 0)
+        {
+            HasError = false;
+            Status = status.MissingCount > 0
+                ? $"프레임 없음 (없는 파일 {status.MissingCount}개) · 이미지 파일을 이 카드에 끌어다 놓으세요"
+                : "프레임 없음 · 이미지 파일을 이 카드에 끌어다 놓으세요";
         }
         else
         {

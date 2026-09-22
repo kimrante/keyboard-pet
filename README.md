@@ -84,6 +84,14 @@ dotnet run --project src/KeyboardPet.App
 폴더는 그대로 세트가 되고(복사 없음), 파일들은 `%AppData%\KeyboardPet\sets\<이름>\`에 복사되어 새 세트가 됩니다.
 기존 세트 카드 위에 놓으면 그 세트 폴더로 복사되어 프레임 뒤에 추가됩니다.
 
+**빈 세트 만들기**: 폴더가 없어도 **새 세트** 버튼으로 빈 세트를 만들 수 있습니다. 앱 폴더에 세트 폴더가 생기고,
+카드에 이미지를 끌어다 놓으면 그 폴더로 복사됩니다.
+
+**세트별 키 매핑·애니메이션 설정**: 애니메이션 탭과 키 매핑 탭(그리고 트레이의 모드 메뉴)은 항상 *현재 기본 세트*의
+설정을 편집합니다. 기본 세트를 바꾸면 그 세트에 저장된 설정으로 함께 전환되므로, 세트마다 다른 규칙과 전환 방식을
+둘 수 있습니다. 설정이 없는 세트로 처음 바꾸면 지금 쓰던 설정을 복사해 시작하고, 세트 이름을 바꾸면 설정도 따라갑니다.
+설정 파일에는 `setProfiles`(세트 이름 → animation, rules)로 저장되며, 최상위 `animation`/`rules`는 프로필이 없는 세트의 공통값입니다.
+
 ### 키 매핑 규칙
 
 설정 → 키 매핑 탭에서 규칙을 추가합니다. **위에서부터 먼저 맞는 규칙**이 적용되므로
@@ -131,7 +139,11 @@ Enter를 칠 때마다 0.5초 동안 놀란 얼굴이 보였다가 원래 애니
     { "keys": ["Enter"], "frameSet": "jump",   "holdMs": 800, "resetIndex": true },
     { "keys": ["Space"], "frameSet": "cat",    "holdMs": 400, "resetIndex": true, "frameIndex": 2 },
     { "keys": ["*"],     "frameSet": "typing", "holdMs": 600, "resetIndex": false }
-  ]
+  ],
+  "setProfiles": {
+    "cat": { "animation": { "mode": "Adaptive" },
+             "rules": [ { "keys": ["Enter"], "frameSet": "cat", "holdMs": 500, "frameIndex": 3 } ] }
+  }
 }
 ```
 

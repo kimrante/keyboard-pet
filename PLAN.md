@@ -199,6 +199,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 - `frameIndex`(M7): 값이 있으면 세트를 재생하지 않고 그 프레임 한 장만 정지 표시한다. 엔진은 고정(Pinned) 상태가 되어 스케줄러의 전진을 무시하며, 복귀 시 고정이 풀린다.
 - 루프 프레임(M8): 세트의 `animationFrames`에 든 파일만 루프를 돌고, 나머지(키 전용)는 `frameIndex` 규칙으로만 표시된다. 엔진의 Advance/ResetToFirst는 `FrameSet.LoopFrames` 순서를 따른다.
 - 복귀 프레임(M10): 세트의 `idleFrame`이 있으면 무입력 복귀 시 루프 첫 프레임 대신 그 프레임을 보여준다(키 전용 프레임 가능). 타수 기반·타이핑 속도 연동 스케줄러는 시작 시에도 복귀 프레임으로 대기한다.
+- 세트 프로필(M11): 규칙과 애니메이션 옵션은 `setProfiles[기본 세트]`를 우선 적용하고 없으면 최상위 값을 쓴다. 모든 편집(설정 창·트레이 메뉴)은 현재 기본 세트의 프로필에 기록된다.
 - 조합키(Ctrl/Shift/Alt) 지원: 훅에서 modifier 상태를 `GetAsyncKeyState` 로 함께 읽는다.
 - 매칭되지 않는 키는 타수 카운트만 증가시키고 세트는 유지.
 
@@ -274,6 +275,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | R2 ✅ 완료(2026-09-22) | Windows 10 시작 크래시 수정 | H.NotifyIcon ForceCreate의 효율 모드(SetProcessInformation, Idle 우선순위) 비활성화, 트레이 생성 실패 시 대체 아이콘→트레이 없이 실행, 시작 단계별 예외 격리, 훅 콜백 예외 차단, AppDomain/Task 미처리 예외 crash.log 기록, DispatcherUnhandledException Handled 처리, app.ico BMP 항목 재생성 | 0.5일 |
 | R3 ✅ 완료(2026-09-23) | 시작 진단 강화 · 포터블 배포 | 프로세스 시작 직후부터 startup.log 단계 추적(OS·런타임·인수 포함), --no-tray / --no-hook 옵션, 임시 폴더 추출이 없는 포터블 zip 게시(publish.ps1 -Portable) | 0.5일 |
 | M10 ✅ 완료(2026-09-23) | 무입력 복귀 프레임 · 드래그앤드롭 가져오기 | 세트별 idleFrame(FrameSet.IdleFrameIndex, 엔진 ReturnToIdle, 스케줄러 시작 시 복귀), 세트 탭에 파일/폴더 드롭(폴더→세트, 파일→앱 폴더 복사 후 새 세트, 카드 위→해당 세트에 추가), publish.ps1 -All. 릴리스에는 항상 exe+포터블 zip | 0.5일 |
+| M11 ✅ 완료(2026-09-23) | 빈 세트 만들기 · 세트별 설정 프로필 | "새 세트" 버튼(앱 관리 폴더 생성, 카드 드롭으로 채움, 빈 세트는 안내 표시), AppSettings.SetProfiles(세트 이름 → AnimationOptions·Rules)와 EffectiveAnimation/EffectiveRules, 기본 세트 전환 시 프로필 적용·없으면 현재 설정 복사, 세트 이름 변경 시 프로필 이동, 탭 상단 편집 대상 안내 | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

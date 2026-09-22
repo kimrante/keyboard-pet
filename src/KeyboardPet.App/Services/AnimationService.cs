@@ -74,7 +74,7 @@ public sealed class AnimationService : IDisposable
         _settings.Changed += OnSettingsChanged;
 
         ReloadAll(_settings.Current);
-        _engine.ApplyOptions(_settings.Current.Animation);
+        _engine.ApplyOptions(_settings.Current.EffectiveAnimation);
         _engine.Start();
     }
 
@@ -112,20 +112,21 @@ public sealed class AnimationService : IDisposable
         var setsChanged = !AppSettings.FrameSetsEqual(old.FrameSets, @new.FrameSets)
                           || !string.Equals(old.DefaultFrameSet, @new.DefaultFrameSet, StringComparison.OrdinalIgnoreCase);
 
+        // 규칙과 애니메이션 옵션은 기본 세트의 프로필을 따른다(EffectiveRules / EffectiveAnimation).
         if (setsChanged)
         {
             ReloadAll(@new);
         }
-        else if (!AppSettings.RulesEqual(old.Rules, @new.Rules))
+        else if (!AppSettings.RulesEqual(old.EffectiveRules, @new.EffectiveRules))
         {
-            ConfigureRules(@new.Rules);
+            ConfigureRules(@new.EffectiveRules);
             ShowDefault();
             Reloaded?.Invoke();
         }
 
-        if (old.Animation != @new.Animation)
+        if (old.EffectiveAnimation != @new.EffectiveAnimation)
         {
-            _engine.ApplyOptions(@new.Animation);
+            _engine.ApplyOptions(@new.EffectiveAnimation);
         }
     }
 
@@ -133,7 +134,7 @@ public sealed class AnimationService : IDisposable
     {
         LoadSets(s.FrameSets);
         DefaultSetName = _sets.ContainsKey(s.DefaultFrameSet) ? s.DefaultFrameSet : AppSettings.BuiltInDefaultSet;
-        ConfigureRules(s.Rules);
+        ConfigureRules(s.EffectiveRules);
         ShowDefault();
         Reloaded?.Invoke();
     }
@@ -154,9 +155,8 @@ public sealed class AnimationService : IDisposable
                 var missing = set.MissingFiles?.Count ?? 0;
                 if (set.Set.IsEmpty)
                 {
-                    _statuses[fs.Name] = new FrameSetStatus(0, false,
-                        fs.Frames is null ? "폴더에 지원하는 이미지 파일이 없습니다." : "남은 프레임이 없습니다. 폴더 순서로 되돌리거나 파일을 확인하세요.",
-                        missing);
+                    // 빈 세트는 오류가 아니다("새 세트"로 만든 뒤 이미지를 끌어다 넣는 흐름). 애니메이션에는 쓰지 않는다.
+                    _statuses[fs.Name] = new FrameSetStatus(0, false, null, missing);
                     continue;
                 }
 

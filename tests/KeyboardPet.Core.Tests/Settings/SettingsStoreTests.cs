@@ -55,6 +55,11 @@ public sealed class SettingsStoreTests : IDisposable
                 new KeyRule("*", "cat", HoldMs: 0, ResetIndex: true),
                 new KeyRule("Space", "cat", HoldMs: 300, ResetIndex: true, FrameIndex: 1),
             },
+            SetProfiles = new Dictionary<string, SetProfile>
+            {
+                ["cat"] = new(new AnimationOptions { Mode = FrameMode.Adaptive, AdaptiveFastMs = 40 }, new[] { new KeyRule("Tab", "dog", HoldMs: 250) }),
+                ["dog"] = new(null, null),
+            },
         };
 
         store.Save(original);
@@ -77,6 +82,10 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(AppSettings.RulesEqual(original.Rules, loaded.Rules));
         Assert.Equal(1, loaded.Rules[2].FrameIndex);
         Assert.Null(loaded.Rules[0].FrameIndex);
+        Assert.True(AppSettings.ProfilesEqual(original.SetProfiles, loaded.SetProfiles));
+        Assert.Equal(FrameMode.Adaptive, loaded.EffectiveAnimation.Mode);      // 기본 세트 cat의 프로필
+        Assert.Equal("Tab", loaded.EffectiveRules[0].Keys[0]);
+        Assert.Null(loaded.ProfileOf("dog")!.Animation);
     }
 
     [Fact]

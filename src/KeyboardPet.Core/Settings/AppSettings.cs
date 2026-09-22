@@ -67,8 +67,17 @@ public sealed record FrameSetSettings(
 }
 
 /// <summary>
+/// 세트별 프로필: 그 세트가 기본 세트일 때 적용되는 애니메이션 옵션과 키 매핑 규칙.
+/// 항목이 null이면 공통 설정(AppSettings.Animation / Rules)을 쓴다.
+/// </summary>
+public sealed record SetProfile(AnimationOptions? Animation = null, IReadOnlyList<KeyRule>? Rules = null);
+
+/// <summary>
 /// 앱 전체 설정. 불변 레코드이며 변경은 with 식으로 새 인스턴스를 만든다.
 /// JSON(settings.json)에 그대로 직렬화된다.
+///
+/// 애니메이션 옵션과 규칙은 세트를 따라간다: <see cref="SetProfiles"/>에 기본 세트의 프로필이 있으면 그것이,
+/// 없으면 공통 값(<see cref="Animation"/>, <see cref="Rules"/>)이 적용된다(<see cref="EffectiveAnimation"/>, <see cref="EffectiveRules"/>).
 /// </summary>
 public sealed record AppSettings
 {
@@ -100,7 +109,81 @@ public sealed record AppSettings
 
     public IReadOnlyList<KeyRule> Rules { get; init; } = DefaultRules;
 
+    /// <summary>세트 이름 → 프로필. 이름 비교는 대소문자를 구분하지 않는다(Normalized가 보장).</summary>
+    public IReadOnlyDictionary<string, SetProfile> SetProfiles { get; init; } = EmptyProfiles;
+
+    private static readonly IReadOnlyDictionary<string, SetProfile> EmptyProfiles =
+        new Dictionary<string, SetProfile>(StringComparer.OrdinalIgnoreCase);
+
     public static AppSettings Default => new();
+
+    // ── 세트를 따라가는 유효 설정 ──
+
+    public SetProfile? ProfileOf(string setName) =>
+        SetProfiles.TryGetValue(setName, out var profile) ? profile : null;
+
+    /// <summary>현재 기본 세트에 적용되는 애니메이션 옵션.</summary>
+    public AnimationOptions EffectiveAnimation => ProfileOf(DefaultFrameSet)?.Animation ?? Animation;
+
+    /// <summary>현재 기본 세트에 적용되는 키 매핑 규칙.</summary>
+    public IReadOnlyList<KeyRule> EffectiveRules => ProfileOf(DefaultFrameSet)?.Rules ?? Rules;
+
+    /// <summary>현재 기본 세트의 프로필에 애니메이션 옵션을 기록한다(프로필이 없으면 현재 유효값으로 만든 뒤 기록).</summary>
+    public AppSettings WithEffectiveAnimation(AnimationOptions animation) =>
+        WithProfile(DefaultFrameSet, p => p with { Animation = animation });
+
+    /// <summary>현재 기본 세트의 프로필에 규칙을 기록한다.</summary>
+    public AppSettings WithEffectiveRules(IReadOnlyList<KeyRule> rules) =>
+        WithProfile(DefaultFrameSet, p => p with { Rules = rules });
+
+    /// <summary>
+    /// 기본 세트를 바꾼다. 새 세트에 프로필이 없으면 지금 적용 중인 설정을 복사해 시작하므로
+    /// 세트를 바꿔도 설정이 갑자기 초기화되지 않는다.
+    /// </summary>
+    public AppSettings WithDefaultFrameSet(string setName)
+    {
+        if (string.IsNullOrWhiteSpace(setName))
+        {
+            return this;
+        }
+
+        var next = this with { DefaultFrameSet = setName };
+        return ProfileOf(setName) is null
+            ? next.WithProfile(setName, _ => new SetProfile(EffectiveAnimation, EffectiveRules))
+            : next;
+    }
+
+    /// <summary>세트 이름이 바뀌면 프로필과 기본 세트 참조도 따라가게 한다.</summary>
+    public AppSettings WithSetRenamed(string oldName, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)
+            || string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase))
+        {
+            return this;
+        }
+
+        var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase);
+        if (profiles.Remove(oldName, out var moved))
+        {
+            profiles[newName] = moved;
+        }
+
+        return this with
+        {
+            SetProfiles = profiles,
+            DefaultFrameSet = string.Equals(DefaultFrameSet, oldName, StringComparison.OrdinalIgnoreCase) ? newName : DefaultFrameSet,
+        };
+    }
+
+    private AppSettings WithProfile(string setName, Func<SetProfile, SetProfile> mutate)
+    {
+        var current = ProfileOf(setName) ?? new SetProfile(EffectiveAnimation, EffectiveRules);
+        var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase)
+        {
+            [setName] = mutate(current),
+        };
+        return this with { SetProfiles = profiles };
+    }
 
     /// <summary>역직렬화 결과의 null·범위 밖 값을 보정한 복사본.</summary>
     public AppSettings Normalized() => this with
@@ -118,7 +201,15 @@ public sealed record AppSettings
                 CleanNames(f.AnimationFrames),
                 string.IsNullOrWhiteSpace(f.IdleFrame) ? null : f.IdleFrame.Trim()))
             .ToList(),
-        Rules = (Rules ?? Array.Empty<KeyRule>())
+        Rules = CleanRules(Rules),
+        SetProfiles = CleanProfiles(SetProfiles),
+    };
+
+    private static List<string>? CleanNames(IReadOnlyList<string>? names) =>
+        names?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
+
+    private static List<KeyRule> CleanRules(IReadOnlyList<KeyRule>? rules) =>
+        (rules ?? Array.Empty<KeyRule>())
             .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.FrameSet))
             .Select(r => r with
             {
@@ -127,11 +218,45 @@ public sealed record AppSettings
                 HoldMs = Math.Max(0, r.HoldMs),
                 FrameIndex = r.FrameIndex is < 0 ? null : r.FrameIndex,
             })
-            .ToList(),
-    };
+            .ToList();
 
-    private static List<string>? CleanNames(IReadOnlyList<string>? names) =>
-        names?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
+    private static IReadOnlyDictionary<string, SetProfile> CleanProfiles(IReadOnlyDictionary<string, SetProfile>? profiles)
+    {
+        var result = new Dictionary<string, SetProfile>(StringComparer.OrdinalIgnoreCase);
+        if (profiles is null)
+        {
+            return result;
+        }
+
+        foreach (var (name, profile) in profiles)
+        {
+            if (string.IsNullOrWhiteSpace(name) || profile is null)
+            {
+                continue;
+            }
+
+            result[name.Trim()] = new SetProfile(
+                profile.Animation?.Normalized(),
+                profile.Rules is null ? null : CleanRules(profile.Rules));
+        }
+
+        return result;
+    }
+
+    public static bool ProfilesEqual(IReadOnlyDictionary<string, SetProfile> a, IReadOnlyDictionary<string, SetProfile> b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Count != b.Count) return false;
+        foreach (var (name, pa) in a)
+        {
+            if (!b.TryGetValue(name, out var pb)) return false;
+            if (pa.Animation != pb.Animation) return false;
+            if (pa.Rules is null != pb.Rules is null) return false;
+            if (pa.Rules is not null && !RulesEqual(pa.Rules, pb.Rules!)) return false;
+        }
+
+        return true;
+    }
 
     // 레코드의 기본 동등성은 리스트 속성을 참조로 비교하므로, 부분별 값 비교 도우미를 둔다.
 
