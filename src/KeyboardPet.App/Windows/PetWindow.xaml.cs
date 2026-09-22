@@ -126,10 +126,24 @@ public partial class PetWindow : Window
             return;
         }
 
-        _autoAnchor = false;
-        DragMove();
+        var before = (Left, Top);
+        try
+        {
+            // 빠른 클릭-해제 뒤에 핸들러가 돌면 버튼이 이미 떼어져 있어 DragMove가 예외를 던진다.
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
 
         var (left, top) = (Left, Top);
+        if (left == before.Left && top == before.Top)
+        {
+            return; // 움직이지 않은 클릭은 설정을 건드리지 않는다.
+        }
+
+        _autoAnchor = false;
         _settings.Update(s => s with { Window = s.Window with { X = left, Y = top } });
     }
 

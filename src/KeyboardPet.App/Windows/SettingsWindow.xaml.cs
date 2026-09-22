@@ -34,9 +34,17 @@ public partial class SettingsWindow : Window
         _dragCandidate = (sender as FrameworkElement)?.DataContext as FrameEntryViewModel;
     }
 
+    private void FrameTile_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragCandidate = null;
+    }
+
     private void FrameTile_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (_dragCandidate is null || e.LeftButton != MouseButtonState.Pressed)
+        // 드래그는 버튼을 누른 바로 그 타일 위에서만 시작한다(다른 곳에서 누른 채 지나가는 경우 제외).
+        if (_dragCandidate is null
+            || e.LeftButton != MouseButtonState.Pressed
+            || !ReferenceEquals((sender as FrameworkElement)?.DataContext, _dragCandidate))
         {
             return;
         }

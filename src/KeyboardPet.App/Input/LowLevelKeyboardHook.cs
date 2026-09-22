@@ -29,11 +29,16 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
 
+    // KBDLLHOOKSTRUCT { uint vkCode; uint scanCode; uint flags; uint time; UIntPtr dwExtraInfo; } 필드 오프셋
+    private const int VkCodeOffset = 0;
+    private const int TimeOffset = 12;
+
     private readonly Dispatcher _dispatcher;
     private readonly AutoRepeatDetector _repeatDetector = new();
 
-    // GC가 델리게이트를 수거하지 않도록 필드로 보관한다.
+    // GC가 델리게이트를 수거하지 않도록 필드로 보관한다. 콜백마다 새 델리게이트를 만들지 않도록 전파용도 미리 만든다.
     private readonly HookProc _hookProc;
+    private readonly Action<KeyEvent> _raise;
     private IntPtr _hookHandle;
     private bool _systemEventsSubscribed;
 
@@ -41,6 +46,7 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     {
         _dispatcher = dispatcher;
         _hookProc = HookCallback;
+        _raise = keyEvent => KeyEvent?.Invoke(this, keyEvent);
     }
 
     public event EventHandler<KeyEvent>? KeyEvent;
@@ -137,14 +143,15 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
         });
     }
 
+    /// <summary>
+    /// 훅 콜백. Windows는 느린 훅을 제거하므로 구조체 전체 마샬링 대신 필요한 두 필드만 읽고,
+    /// 조합키 상태는 키 다운일 때만 조회하며, 이벤트 전파는 미리 만든 델리게이트로 Dispatcher에 넘긴다.
+    /// </summary>
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
             var message = (int)wParam;
-            var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            var vk = (int)data.vkCode;
-
             bool? isDown = message switch
             {
                 WM_KEYDOWN or WM_SYSKEYDOWN => true,
@@ -154,19 +161,23 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
 
             if (isDown is not null)
             {
+                var vk = Marshal.ReadInt32(lParam, VkCodeOffset);
                 bool isRepeat;
+                KeyModifiers modifiers;
                 if (isDown.Value)
                 {
-                    isRepeat = _repeatDetector.OnKeyDown(vk, data.time);
+                    var time = (uint)Marshal.ReadInt32(lParam, TimeOffset);
+                    isRepeat = _repeatDetector.OnKeyDown(vk, time);
+                    modifiers = ReadModifiers();
                 }
                 else
                 {
                     _repeatDetector.OnKeyUp(vk);
                     isRepeat = false;
+                    modifiers = KeyModifiers.None;
                 }
 
-                var keyEvent = new KeyEvent(vk, isDown.Value, ReadModifiers(), isRepeat);
-                _dispatcher.BeginInvoke(DispatcherPriority.Input, () => KeyEvent?.Invoke(this, keyEvent));
+                _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, isDown.Value, modifiers, isRepeat));
             }
         }
 
@@ -186,16 +197,6 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     private static bool IsPressed(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
 
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KBDLLHOOKSTRUCT
-    {
-        public uint vkCode;
-        public uint scanCode;
-        public uint flags;
-        public uint time;
-        public UIntPtr dwExtraInfo;
-    }
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);

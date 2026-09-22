@@ -198,6 +198,7 @@
                                                         <Border Width="56" Height="64" Margin="0,0,4,4" BorderThickness="1" CornerRadius="3"
                                                                 AllowDrop="True" Cursor="SizeAll" ToolTip="{Binding FileName}"
                                                                 PreviewMouseLeftButtonDown="FrameTile_PreviewMouseLeftButtonDown"
+                                                                PreviewMouseLeftButtonUp="FrameTile_PreviewMouseLeftButtonUp"
                                                                 PreviewMouseMove="FrameTile_PreviewMouseMove"
                                                                 DragOver="FrameTile_DragOver"
                                                                 Drop="FrameTile_Drop">

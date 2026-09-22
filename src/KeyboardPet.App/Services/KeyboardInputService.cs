@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using KeyboardPet.App.ViewModels;
 using KeyboardPet.Core.Abstractions;
+using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.App.Services;
 
@@ -50,7 +51,13 @@ public sealed class KeyboardInputService : IDisposable
             return;
         }
 
-        _shell.KeystrokeCount++;
+        // Shift/Ctrl/Alt/Win 단독 입력은 타수로 세지 않는다(Shift+A는 A 한 번으로 계산).
+        // 규칙에는 전달하므로 "LShift" 같은 규칙은 여전히 동작한다.
+        if (!KeyNames.IsModifierKey(e.VirtualKey))
+        {
+            _shell.KeystrokeCount++;
+        }
+
         _animation.OnKeyDown(e);
 
         // 개인정보 원칙: 어떤 키인지는 출력하지 않는다.

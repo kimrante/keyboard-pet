@@ -55,6 +55,16 @@ public class AutoRepeatDetectorTests
     }
 
     [Fact]
+    public void TimestampWrapAround_IsNotRepeat()
+    {
+        var detector = new AutoRepeatDetector();
+        detector.OnKeyDown(VkA, uint.MaxValue - 10);
+
+        // 부팅 후 밀리초 카운터가 0으로 돌아간 뒤의 첫 입력
+        Assert.False(detector.OnKeyDown(VkA, 5));
+    }
+
+    [Fact]
     public void Reset_ClearsAllState()
     {
         var detector = new AutoRepeatDetector();

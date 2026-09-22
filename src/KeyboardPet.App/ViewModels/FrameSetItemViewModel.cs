@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeyboardPet.App.Services;
@@ -43,7 +42,6 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
 {
     private const int ThumbnailPixelWidth = 48;
 
-    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
     private int _thumbnailGeneration;
 
     [ObservableProperty]

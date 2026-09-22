@@ -75,11 +75,17 @@ public sealed class AnimationService : IDisposable
         _engine.Start();
     }
 
-    /// <summary>키 다운 1건. 규칙 매칭 → 세트 전환 → 타수 스케줄러 순으로 처리한다.</summary>
+    /// <summary>
+    /// 키 다운 1건. 규칙 매칭 → 세트 전환 → 타수 스케줄러 순으로 처리한다.
+    /// 조합키 단독 입력(Shift, Ctrl 등)은 규칙에는 전달하지만 타수 스케줄러는 움직이지 않는다.
+    /// </summary>
     public void OnKeyDown(KeyEvent e)
     {
         _rules?.OnKeyDown(e);
-        _engine.OnKeystroke();
+        if (!KeyNames.IsModifierKey(e.VirtualKey))
+        {
+            _engine.OnKeystroke();
+        }
     }
 
     /// <summary>로드된 세트의 디코딩 프레임(설정 창의 프레임 선택 미리보기용). 없으면 null.</summary>
@@ -130,6 +136,9 @@ public sealed class AnimationService : IDisposable
         _sets.Clear();
         _statuses.Clear();
 
+        // 파일 단위 디코딩 캐시: 순서 편집처럼 세트 목록만 바뀔 때 디스크를 다시 읽지 않는다.
+        _cache.BeginGeneration();
+
         foreach (var fs in userSets)
         {
             try
@@ -163,6 +172,9 @@ public sealed class AnimationService : IDisposable
                 _statuses.TryAdd(name, new FrameSetStatus(set.Set.FrameCount, true, null));
             }
         }
+
+        // 이번 로드에서 쓰이지 않은 파일의 비트맵은 버려 메모리를 되돌린다.
+        _cache.EndGeneration();
     }
 
     private void ConfigureRules(IEnumerable<KeyRule> rules)
@@ -205,13 +217,19 @@ public sealed class AnimationService : IDisposable
 
     private void Show(ActiveSetRequest request)
     {
-        if (!_sets.TryGetValue(request.FrameSet, out var set) && !_sets.TryGetValue(DefaultSetName, out set))
+        var frameIndex = request.FrameIndex;
+        if (!_sets.TryGetValue(request.FrameSet, out var set))
         {
-            set = _sets[AppSettings.BuiltInDefaultSet];
+            // 요청한 세트가 없으면 기본 세트로 대체하되, 다른 세트의 프레임 번호를 그대로 고정하면 안 된다.
+            frameIndex = null;
+            if (!_sets.TryGetValue(DefaultSetName, out set))
+            {
+                set = _sets[AppSettings.BuiltInDefaultSet];
+            }
         }
 
         _active = set;
-        _engine.SetActiveSet(set.Set, request.ResetIndex, request.FrameIndex);
+        _engine.SetActiveSet(set.Set, request.ResetIndex, frameIndex);
     }
 
     private void OnFrameChanged(int index)
