@@ -1,0 +1,437 @@
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using KeyboardPet.App.Services;
+using KeyboardPet.Core.Abstractions;
+using KeyboardPet.Core.Animation;
+using KeyboardPet.Core.Rules;
+using KeyboardPet.Core.Settings;
+using Microsoft.Win32;
+
+namespace KeyboardPet.App.ViewModels;
+
+/// <summary>
+/// 설정 창의 뷰모델. 모든 변경은 즉시 SettingsService에 반영되고(즉시 적용·자동 저장),
+/// 설정이 바깥(트레이 메뉴, 창 드래그)에서 바뀌면 여기에도 반영된다.
+/// </summary>
+public sealed partial class SettingsViewModel : ObservableObject, IDisposable
+{
+    private readonly SettingsService _settings;
+    private readonly AnimationService _animation;
+    private readonly IKeyboardSource _keyboard;
+    private bool _syncing;
+    private RuleItemViewModel? _captureTarget;
+
+    // ── 일반 ──
+    [ObservableProperty] private bool _isTopmost;
+    [ObservableProperty] private double _scale;
+    [ObservableProperty] private double _opacity;
+    [ObservableProperty] private bool _clickThrough;
+    [ObservableProperty] private bool _showCounter;
+    [ObservableProperty] private bool _startWithWindows;
+    [ObservableProperty] private bool _countAutoRepeat;
+
+    // ── 애니메이션 ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFixedMode), nameof(IsRandomMode), nameof(IsKeystrokeMode))]
+    private FrameMode _frameMode;
+    [ObservableProperty] private int _fixedIntervalMs;
+    [ObservableProperty] private int _randomMinMs;
+    [ObservableProperty] private int _randomMaxMs;
+    [ObservableProperty] private int _keysPerFrame;
+    [ObservableProperty] private int _idleReturnMs;
+
+    // ── 이미지 세트 ──
+    [ObservableProperty] private string? _defaultFrameSet;
+
+    // ── 키 매핑 ──
+    [ObservableProperty] private bool _isCapturing;
+    [ObservableProperty] private string _ruleErrorsText = string.Empty;
+
+    // ── 정보 ──
+    [ObservableProperty] private string? _statusMessage;
+
+    /// <summary>현재 내장 세트로 대체되고 있는 이름들의 요약. 예: "idle (4프레임), jump (2프레임)"</summary>
+    [ObservableProperty] private string _builtInSummary = string.Empty;
+
+    public SettingsViewModel(SettingsService settings, AnimationService animation, IKeyboardSource keyboard)
+    {
+        _settings = settings;
+        _animation = animation;
+        _keyboard = keyboard;
+
+        SyncFrom(settings.Current);
+        RefreshStatuses();
+
+        _settings.Changed += OnSettingsChanged;
+        _animation.Reloaded += RefreshStatuses;
+    }
+
+    public ObservableCollection<FrameSetItemViewModel> FrameSets { get; } = new();
+
+    public ObservableCollection<string> AvailableSetNames { get; } = new();
+
+    public ObservableCollection<RuleItemViewModel> Rules { get; } = new();
+
+    public bool IsFixedMode
+    {
+        get => FrameMode == FrameMode.Fixed;
+        set { if (value) FrameMode = FrameMode.Fixed; }
+    }
+
+    public bool IsRandomMode
+    {
+        get => FrameMode == FrameMode.Random;
+        set { if (value) FrameMode = FrameMode.Random; }
+    }
+
+    public bool IsKeystrokeMode
+    {
+        get => FrameMode == FrameMode.Keystroke;
+        set { if (value) FrameMode = FrameMode.Keystroke; }
+    }
+
+    public string AppVersion =>
+        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+
+    public string SettingsFilePath => _settings.FilePath;
+
+    public string? LoadError => _settings.LastLoadError is null
+        ? null
+        : $"설정 파일이 손상되어 기본값으로 시작했습니다. 손상된 파일은 같은 폴더에 .corrupt-* 이름으로 보관됩니다.\n({_settings.LastLoadError})";
+
+    public string PrivacyNotice =>
+        "Keyboard Pet은 전역 키보드 훅으로 키 입력 '이벤트'만 받습니다. " +
+        "어떤 키가 눌렸는지는 기록·저장·전송하지 않으며, 메모리에서도 규칙 매칭과 타수 계산에만 순간적으로 사용됩니다. " +
+        "네트워크 통신을 하지 않습니다.";
+
+    public void Dispose()
+    {
+        StopCapture();
+        _settings.Changed -= OnSettingsChanged;
+        _animation.Reloaded -= RefreshStatuses;
+    }
+
+    // ── 커밋 (항목 뷰모델이 호출) ──
+
+    public void CommitFrameSets()
+    {
+        Push(s => s with
+        {
+            FrameSets = FrameSets.Select(f => new FrameSetSettings(f.Name, f.Folder)).ToList(),
+        });
+    }
+
+    public void CommitRules()
+    {
+        Push(s => s with { Rules = Rules.Select(r => r.ToRule()).ToList() });
+    }
+
+    // ── 명령: 일반 ──
+
+    [RelayCommand]
+    private void ResetPosition() => Push(s => s with { Window = s.Window with { X = null, Y = null } });
+
+    // ── 명령: 이미지 세트 ──
+
+    [RelayCommand]
+    private void AddFrameSet()
+    {
+        var dialog = new OpenFolderDialog { Title = "이미지 세트 폴더 선택", Multiselect = false };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var name = UniqueSetName(Path.GetFileName(dialog.FolderName.TrimEnd(Path.DirectorySeparatorChar)));
+        FrameSets.Add(new FrameSetItemViewModel(this, name, dialog.FolderName));
+        CommitFrameSets();
+    }
+
+    [RelayCommand]
+    private void RemoveFrameSet(FrameSetItemViewModel item)
+    {
+        FrameSets.Remove(item);
+        CommitFrameSets();
+    }
+
+    [RelayCommand]
+    private void BrowseFrameSetFolder(FrameSetItemViewModel item)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = $"'{item.Name}' 세트의 폴더 선택",
+            Multiselect = false,
+            InitialDirectory = Directory.Exists(item.Folder) ? item.Folder : null,
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            item.Folder = dialog.FolderName;
+        }
+    }
+
+    // ── 명령: 키 매핑 ──
+
+    [RelayCommand]
+    private void AddRule()
+    {
+        var set = DefaultFrameSet is { Length: > 0 } d && AvailableSetNames.Contains(d)
+            ? d
+            : AvailableSetNames.FirstOrDefault() ?? AppSettings.BuiltInDefaultSet;
+        Rules.Add(new RuleItemViewModel(this, new KeyRule(Array.Empty<string>(), set, HoldMs: 500, ResetIndex: true)));
+        CommitRules();
+    }
+
+    [RelayCommand]
+    private void RemoveRule(RuleItemViewModel item)
+    {
+        if (_captureTarget == item)
+        {
+            StopCapture();
+        }
+
+        Rules.Remove(item);
+        CommitRules();
+    }
+
+    [RelayCommand]
+    private void MoveRuleUp(RuleItemViewModel item) => MoveRule(item, -1);
+
+    [RelayCommand]
+    private void MoveRuleDown(RuleItemViewModel item) => MoveRule(item, +1);
+
+    [RelayCommand]
+    private void CaptureKey(RuleItemViewModel item)
+    {
+        if (IsCapturing && _captureTarget == item)
+        {
+            StopCapture();
+            return;
+        }
+
+        StopCapture();
+        _captureTarget = item;
+        IsCapturing = true;
+        _keyboard.KeyEvent += OnCaptureKeyEvent;
+    }
+
+    // ── 명령: 정보 ──
+
+    [RelayCommand]
+    private void OpenSettingsFolder()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(SettingsFilePath)!;
+            Directory.CreateDirectory(directory);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            StatusMessage = $"폴더를 열 수 없습니다: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void RestoreDefaults()
+    {
+        Push(_ => AppSettings.Default);
+        StatusMessage = "모든 설정을 기본값으로 되돌렸습니다.";
+    }
+
+    // ── 속성 변경 → 설정 반영 ──
+
+    partial void OnIsTopmostChanged(bool value) => Push(s => s with { IsTopmost = value });
+    partial void OnScaleChanged(double value) => Push(s => s with { Window = s.Window with { Scale = value } });
+    partial void OnOpacityChanged(double value) => Push(s => s with { Window = s.Window with { Opacity = value } });
+    partial void OnClickThroughChanged(bool value) => Push(s => s with { Window = s.Window with { ClickThrough = value } });
+    partial void OnShowCounterChanged(bool value) => Push(s => s with { Window = s.Window with { ShowCounter = value } });
+    partial void OnStartWithWindowsChanged(bool value) => Push(s => s with { StartWithWindows = value });
+    partial void OnCountAutoRepeatChanged(bool value) => Push(s => s with { CountAutoRepeat = value });
+
+    partial void OnFrameModeChanged(FrameMode value) => Push(s => s with { Animation = s.Animation with { Mode = value } });
+    partial void OnFixedIntervalMsChanged(int value) => Push(s => s with { Animation = s.Animation with { FixedIntervalMs = value } });
+    partial void OnRandomMinMsChanged(int value) => Push(s => s with { Animation = s.Animation with { RandomMinMs = value } });
+    partial void OnRandomMaxMsChanged(int value) => Push(s => s with { Animation = s.Animation with { RandomMaxMs = value } });
+    partial void OnKeysPerFrameChanged(int value) => Push(s => s with { Animation = s.Animation with { KeysPerFrame = value } });
+    partial void OnIdleReturnMsChanged(int value) => Push(s => s with { Animation = s.Animation with { IdleReturnMs = value } });
+
+    partial void OnDefaultFrameSetChanged(string? value)
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            Push(s => s with { DefaultFrameSet = value });
+        }
+    }
+
+    private void Push(Func<AppSettings, AppSettings> mutate)
+    {
+        if (!_syncing)
+        {
+            _settings.Update(mutate);
+        }
+    }
+
+    // ── 설정 → 뷰모델 동기화 ──
+
+    private void OnSettingsChanged(AppSettings old, AppSettings @new) => SyncFrom(@new);
+
+    private void SyncFrom(AppSettings s)
+    {
+        _syncing = true;
+        try
+        {
+            IsTopmost = s.IsTopmost;
+            Scale = s.Window.Scale;
+            Opacity = s.Window.Opacity;
+            ClickThrough = s.Window.ClickThrough;
+            ShowCounter = s.Window.ShowCounter;
+            StartWithWindows = s.StartWithWindows;
+            CountAutoRepeat = s.CountAutoRepeat;
+
+            FrameMode = s.Animation.Mode;
+            FixedIntervalMs = s.Animation.FixedIntervalMs;
+            RandomMinMs = s.Animation.RandomMinMs;
+            RandomMaxMs = s.Animation.RandomMaxMs;
+            KeysPerFrame = s.Animation.KeysPerFrame;
+            IdleReturnMs = s.Animation.IdleReturnMs;
+
+            var currentSets = FrameSets.Select(f => new FrameSetSettings(f.Name, f.Folder)).ToList();
+            if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
+            {
+                FrameSets.Clear();
+                foreach (var fs in s.FrameSets)
+                {
+                    FrameSets.Add(new FrameSetItemViewModel(this, fs.Name, fs.Folder));
+                }
+            }
+
+            RefreshAvailableSetNames();
+            DefaultFrameSet = s.DefaultFrameSet;
+
+            var currentRules = Rules.Select(r => r.ToRule()).ToList();
+            if (!AppSettings.RulesEqual(currentRules, s.Rules))
+            {
+                Rules.Clear();
+                foreach (var rule in s.Rules)
+                {
+                    Rules.Add(new RuleItemViewModel(this, rule));
+                }
+            }
+            else
+            {
+                foreach (var rule in Rules)
+                {
+                    rule.Revalidate();
+                }
+            }
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private void RefreshAvailableSetNames()
+    {
+        var names = FrameSets.Select(f => f.Name)
+            .Concat(AnimationService.BuiltInSetNames)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (names.SequenceEqual(AvailableSetNames))
+        {
+            return;
+        }
+
+        // ComboBox의 SelectedItem이 잠시 null이 되므로 _syncing 중에만 호출한다.
+        AvailableSetNames.Clear();
+        foreach (var name in names)
+        {
+            AvailableSetNames.Add(name);
+        }
+    }
+
+    private void RefreshStatuses()
+    {
+        foreach (var item in FrameSets)
+        {
+            _animation.SetStatuses.TryGetValue(item.Name, out var status);
+            item.UpdateStatus(status);
+        }
+
+        RuleErrorsText = string.Join(Environment.NewLine, _animation.RuleErrors);
+
+        var builtIns = _animation.SetStatuses
+            .Where(kv => kv.Value.IsBuiltIn)
+            .OrderBy(kv => AnimationService.BuiltInSetNames.ToList().IndexOf(kv.Key))
+            .Select(kv => $"{kv.Key} ({kv.Value.FrameCount}프레임)")
+            .ToList();
+        BuiltInSummary = builtIns.Count == 0
+            ? "내장 세트는 모두 사용자 세트로 대체되었습니다."
+            : "현재 내장 세트 사용 중: " + string.Join(", ", builtIns);
+    }
+
+    private void MoveRule(RuleItemViewModel item, int delta)
+    {
+        var index = Rules.IndexOf(item);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= Rules.Count)
+        {
+            return;
+        }
+
+        Rules.Move(index, target);
+        CommitRules();
+    }
+
+    private void OnCaptureKeyEvent(object? sender, KeyEvent e)
+    {
+        if (!e.IsDown || e.IsAutoRepeat || KeyNames.IsModifierKey(e.VirtualKey))
+        {
+            return;
+        }
+
+        var spec = new KeySpec(e.VirtualKey, e.Modifiers, false).ToString();
+        _captureTarget?.AppendKey(spec);
+        StopCapture();
+    }
+
+    private void StopCapture()
+    {
+        if (IsCapturing)
+        {
+            _keyboard.KeyEvent -= OnCaptureKeyEvent;
+        }
+
+        IsCapturing = false;
+        _captureTarget = null;
+    }
+
+    private string UniqueSetName(string baseName)
+    {
+        if (string.IsNullOrWhiteSpace(baseName))
+        {
+            baseName = "set";
+        }
+
+        var existing = FrameSets.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!existing.Contains(baseName))
+        {
+            return baseName;
+        }
+
+        for (var i = 2; ; i++)
+        {
+            var candidate = $"{baseName}-{i}";
+            if (!existing.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+}

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyName>KeyboardPet</AssemblyName>
+    <RootNamespace>KeyboardPet.App</RootNamespace>
+
+    <Version>1.0.0</Version>
+    <Product>Keyboard Pet</Product>
+    <AssemblyTitle>Keyboard Pet</AssemblyTitle>
+    <Description>키보드 입력에 반응하는 데스크톱 펫 애니메이션</Description>
+    <Copyright>Copyright © 2026</Copyright>
+    <NeutralLanguage>ko-KR</NeutralLanguage>
+
+    <!-- 배포 옵션은 scripts\publish.ps1 또는 Properties\PublishProfiles\win-x64-single.pubxml 참고 -->
+    <SatelliteResourceLanguages>ko;en</SatelliteResourceLanguages>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KeyboardPet.Core\KeyboardPet.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\**\*.png" />
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>

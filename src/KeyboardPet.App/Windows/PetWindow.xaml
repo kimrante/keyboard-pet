@@ -1,0 +1,52 @@
+<Window x:Class="KeyboardPet.App.Windows.PetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:KeyboardPet.App.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:ShellViewModel}"
+        Title="Keyboard Pet"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        Topmost="{Binding IsTopmost, Mode=OneWay}"
+        Opacity="{Binding Opacity, Mode=OneWay}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+
+    <!-- Background=Transparent 인 Grid는 전체 영역에서 마우스 이벤트를 받아 드래그를 가능하게 한다. -->
+    <Grid Background="Transparent"
+          MouseLeftButtonDown="OnMouseLeftButtonDown">
+        <StackPanel Margin="8">
+            <!-- Width/Height를 원본 픽셀 × 배율로 고정해 이미지 파일의 DPI 메타데이터 영향을 받지 않게 한다. -->
+            <Image x:Name="FrameImage"
+                   Source="{Binding CurrentFrame}"
+                   Width="{Binding FrameWidth}"
+                   Height="{Binding FrameHeight}"
+                   Stretch="Fill"
+                   RenderOptions.BitmapScalingMode="HighQuality" />
+
+            <Border HorizontalAlignment="Center"
+                    Margin="0,4,0,0"
+                    Padding="8,2"
+                    CornerRadius="8"
+                    Background="#99000000"
+                    Visibility="{Binding ShowCounter, Converter={StaticResource BoolToVis}}">
+                <TextBlock x:Name="CounterText"
+                           Text="{Binding KeystrokeCount, StringFormat='타수 {0}'}"
+                           Foreground="White"
+                           FontSize="12"
+                           FontFamily="Segoe UI" />
+            </Border>
+        </StackPanel>
+    </Grid>
+</Window>

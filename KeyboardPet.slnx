@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KeyboardPet.App/KeyboardPet.App.csproj" />
+    <Project Path="src/KeyboardPet.Core/KeyboardPet.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KeyboardPet.Core.Tests/KeyboardPet.Core.Tests.csproj" />
+  </Folder>
+</Solution>
