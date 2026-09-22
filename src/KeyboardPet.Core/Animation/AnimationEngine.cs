@@ -78,16 +78,16 @@ public sealed class AnimationEngine : IDisposable
         FrameChanged?.Invoke(FrameIndex);
     }
 
-    /// <summary>루프의 첫 프레임으로 돌아간다(무입력 복귀 등).</summary>
-    public void ResetToFirst()
+    /// <summary>무입력 복귀: 세트의 복귀 프레임(지정이 없으면 루프의 첫 프레임)으로 돌아간다.</summary>
+    public void ReturnToIdle()
     {
-        var first = ActiveSet.FirstLoopIndex;
-        if (IsPinned || FrameIndex == first)
+        var idle = ActiveSet.IdleIndex;
+        if (IsPinned || FrameIndex == idle)
         {
             return;
         }
 
-        FrameIndex = first;
+        FrameIndex = idle;
         FrameChanged?.Invoke(FrameIndex);
     }
 
@@ -141,7 +141,7 @@ public sealed class AnimationEngine : IDisposable
             o.RandomSeed is int seed ? new Random(seed) : null),
 
         FrameMode.Keystroke => new KeystrokeScheduler(
-            _timers, o.KeysPerFrame, TimeSpan.FromMilliseconds(o.IdleReturnMs), Advance, ResetToFirst),
+            _timers, o.KeysPerFrame, TimeSpan.FromMilliseconds(o.IdleReturnMs), Advance, ReturnToIdle),
 
         FrameMode.Adaptive => new AdaptiveScheduler(
             _timers,
@@ -152,7 +152,7 @@ public sealed class AnimationEngine : IDisposable
             TimeSpan.FromMilliseconds(o.AdaptiveWindowMs),
             TimeSpan.FromMilliseconds(o.IdleReturnMs),
             Advance,
-            ResetToFirst),
+            ReturnToIdle),
 
         _ => throw new ArgumentOutOfRangeException(nameof(o), o.Mode, "알 수 없는 프레임 모드"),
     };

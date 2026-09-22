@@ -150,7 +150,7 @@ public sealed class AnimationService : IDisposable
         {
             try
             {
-                var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames, fs.AnimationFrames);
+                var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames, fs.AnimationFrames, fs.IdleFrame);
                 var missing = set.MissingFiles?.Count ?? 0;
                 if (set.Set.IsEmpty)
                 {

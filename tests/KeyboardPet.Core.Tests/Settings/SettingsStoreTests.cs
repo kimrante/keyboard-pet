@@ -45,7 +45,7 @@ public sealed class SettingsStoreTests : IDisposable
             Animation = new AnimationOptions { Mode = FrameMode.Random, RandomMinMs = 50, RandomMaxMs = 900, KeysPerFrame = 3, IdleReturnMs = 1500, FixedIntervalMs = 333 },
             FrameSets = new[]
             {
-                new FrameSetSettings("cat", @"C:\pets\cat", new[] { "c.png", "a.png" }, AnimationFrames: new[] { "c.png" }),
+                new FrameSetSettings("cat", @"C:\pets\cat", new[] { "c.png", "a.png" }, AnimationFrames: new[] { "c.png" }, IdleFrame: "a.png"),
                 new FrameSetSettings("dog", @"C:\pets\dog"),
             },
             DefaultFrameSet = "cat",
@@ -69,8 +69,10 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(AppSettings.FrameSetsEqual(original.FrameSets, loaded.FrameSets));
         Assert.Equal(new[] { "c.png", "a.png" }, loaded.FrameSets[0].Frames);
         Assert.Equal(new[] { "c.png" }, loaded.FrameSets[0].AnimationFrames);
+        Assert.Equal("a.png", loaded.FrameSets[0].IdleFrame);
         Assert.Null(loaded.FrameSets[1].Frames);
         Assert.Null(loaded.FrameSets[1].AnimationFrames);
+        Assert.Null(loaded.FrameSets[1].IdleFrame);
         Assert.Equal("cat", loaded.DefaultFrameSet);
         Assert.True(AppSettings.RulesEqual(original.Rules, loaded.Rules));
         Assert.Equal(1, loaded.Rules[2].FrameIndex);

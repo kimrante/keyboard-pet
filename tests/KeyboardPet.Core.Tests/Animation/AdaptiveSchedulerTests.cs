@@ -66,7 +66,7 @@ public class AdaptiveSchedulerTests
         h.Tick(600);
 
         Assert.Equal(0, h.Advanced);
-        Assert.Equal(0, h.Returned);
+        Assert.Equal(1, h.Returned);   // Start 시 복귀 프레임으로 한 번, 이후 틱에서는 반복하지 않음
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class AdaptiveSchedulerTests
         h.Tick(600);
         h.Tick(600);
 
-        Assert.Equal(1, h.Returned);
+        Assert.Equal(2, h.Returned);   // Start 시 1회 + 만료 시 1회, 이후 반복 없음
         Assert.Equal(1, h.Advanced);
         Assert.True(h.Scheduler.IsIdle);
         Assert.Equal(Slow, h.Timer.Interval);

@@ -45,7 +45,8 @@ public sealed record FrameSetSettings(
     string Name,
     string Folder,
     IReadOnlyList<string>? Frames = null,
-    IReadOnlyList<string>? AnimationFrames = null)
+    IReadOnlyList<string>? AnimationFrames = null,
+    string? IdleFrame = null)
 {
     public bool HasCustomFrames => Frames is not null;
 
@@ -56,9 +57,10 @@ public sealed record FrameSetSettings(
         && Name == other.Name
         && Folder == other.Folder
         && ListsEqual(Frames, other.Frames)
-        && ListsEqual(AnimationFrames, other.AnimationFrames);
+        && ListsEqual(AnimationFrames, other.AnimationFrames)
+        && string.Equals(IdleFrame, other.IdleFrame, StringComparison.OrdinalIgnoreCase);
 
-    public override int GetHashCode() => HashCode.Combine(Name, Folder, Frames?.Count ?? -1, AnimationFrames?.Count ?? -1);
+    public override int GetHashCode() => HashCode.Combine(Name, Folder, Frames?.Count ?? -1, AnimationFrames?.Count ?? -1, IdleFrame?.ToLowerInvariant());
 
     private static bool ListsEqual(IReadOnlyList<string>? a, IReadOnlyList<string>? b) =>
         a is null ? b is null : b is not null && a.SequenceEqual(b);
@@ -113,7 +115,8 @@ public sealed record AppSettings
                 f.Name.Trim(),
                 f.Folder.Trim(),
                 CleanNames(f.Frames),
-                CleanNames(f.AnimationFrames)))
+                CleanNames(f.AnimationFrames),
+                string.IsNullOrWhiteSpace(f.IdleFrame) ? null : f.IdleFrame.Trim()))
             .ToList(),
         Rules = (Rules ?? Array.Empty<KeyRule>())
             .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.FrameSet))

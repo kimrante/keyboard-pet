@@ -46,6 +46,11 @@ public class AppSettingsTests
 
         Assert.False(AppSettings.FrameSetsEqual(all, subset));
         Assert.True(AppSettings.FrameSetsEqual(subset, sameSubset));
+
+        var idle = new[] { new FrameSetSettings("cat", @"C:\a", IdleFrame: "sleep.png") };
+        var idleOtherCase = new[] { new FrameSetSettings("cat", @"C:\a", IdleFrame: "SLEEP.png") };
+        Assert.False(AppSettings.FrameSetsEqual(all, idle));
+        Assert.True(AppSettings.FrameSetsEqual(idle, idleOtherCase));
     }
 
     [Fact]

@@ -9,9 +9,11 @@
   -Portable            단일 파일이 아닌 폴더 형태(자체 포함)로 게시해 zip으로 묶는다.
                        임시 폴더에 네이티브 DLL을 추출하지 않으므로 백신·AppLocker·TEMP 정책으로
                        단일 exe가 실행되지 않는 PC에서 쓴다.
+  -All                 릴리스용: 단일 exe와 포터블 zip을 모두 만든다. 릴리스에는 항상 둘 다 올린다.
 
 .EXAMPLE
   .\scripts\publish.ps1
+  .\scripts\publish.ps1 -All
   .\scripts\publish.ps1 -Compress
   .\scripts\publish.ps1 -FrameworkDependent
   .\scripts\publish.ps1 -Portable
@@ -21,10 +23,17 @@ param(
     [switch]$Compress,
     [switch]$FrameworkDependent,
     [switch]$Portable,
+    [switch]$All,
     [string]$Runtime = "win-x64"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($All) {
+    & $PSCommandPath -Runtime $Runtime
+    & $PSCommandPath -Portable -Runtime $Runtime
+    return
+}
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "src\KeyboardPet.App\KeyboardPet.App.csproj"
 $selfContained = -not $FrameworkDependent

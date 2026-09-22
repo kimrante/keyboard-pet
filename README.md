@@ -75,6 +75,15 @@ dotnet run --project src/KeyboardPet.App
 `Enter` → 4번 프레임 규칙을 만들면, 평소에는 1~3번이 반복되고 Enter를 칠 때만 4번이 나타납니다.
 설정에는 `animationFrames` 배열로 저장되며, 생략하면 모든 프레임이 애니메이션에 참여합니다.
 
+**무입력 복귀 프레임**: 세트 행의 "무입력 복귀 프레임"에서 프레임을 고르면, 타수 기반·타이핑 속도 연동 모드에서
+입력이 멈췄을 때(무입력 복귀 시간 경과) 루프 첫 프레임 대신 그 프레임을 보여줍니다. 시작 직후에도 이 프레임으로 대기하고,
+다시 타이핑하면 루프로 들어갑니다. 키 전용 프레임(예: 잠자는 얼굴)을 고르면 "타이핑할 때만 움직이고 쉴 때는 잠드는" 펫이 됩니다.
+설정에는 `idleFrame`(파일 이름)으로 저장됩니다.
+
+**드래그앤드롭으로 가져오기**: 탐색기에서 이미지 파일이나 폴더를 이미지 세트 탭에 끌어다 놓으면 됩니다.
+폴더는 그대로 세트가 되고(복사 없음), 파일들은 `%AppData%\KeyboardPet\sets\<이름>\`에 복사되어 새 세트가 됩니다.
+기존 세트 카드 위에 놓으면 그 세트 폴더로 복사되어 프레임 뒤에 추가됩니다.
+
 ### 키 매핑 규칙
 
 설정 → 키 매핑 탭에서 규칙을 추가합니다. **위에서부터 먼저 맞는 규칙**이 적용되므로
@@ -114,8 +123,9 @@ Enter를 칠 때마다 0.5초 동안 놀란 얼굴이 보였다가 원래 애니
   "countAutoRepeat": false,
   "startWithWindows": false,
   "frameSets": [ { "name": "cat", "folder": "C:\\pets\\cat",
-                   "frames": [ "idle-1.png", "idle-2.png", "blink.png" ],
-                   "animationFrames": [ "idle-1.png", "idle-2.png" ] } ],
+                   "frames": [ "idle-1.png", "idle-2.png", "blink.png", "sleep.png" ],
+                   "animationFrames": [ "idle-1.png", "idle-2.png" ],
+                   "idleFrame": "sleep.png" } ],
   "defaultFrameSet": "cat",
   "rules": [
     { "keys": ["Enter"], "frameSet": "jump",   "holdMs": 800, "resetIndex": true },
@@ -151,11 +161,17 @@ exe 크기를 줄인 압축 빌드(약 65MB). 대신 실행 중 메모리를 약
 ```
 
 포터블 zip(폴더 형태, 자체 포함). 단일 exe는 첫 실행 때 네이티브 DLL을 `%TEMP%\.net\KeyboardPet\` 아래에 풀어서 쓰는데,
-백신이나 AppLocker, TEMP 실행 제한 정책이 있는 PC에서는 이 단계가 막혀 앱이 조용히 실행되지 않을 수 있습니다.
-그런 PC에서는 zip을 풀어 `KeyboardPet.exe`를 실행하세요:
+백신이나 AppLocker, TEMP 실행 제한 정책이 있는 PC에서는 이 단계가 막혀 앱이 조용히 실행되지 않을 수 있습니다
+(실제 Windows 10 PC에서 확인된 사례). 그런 PC에서는 zip을 풀어 `KeyboardPet.exe`를 실행하세요:
 
 ```powershell
 .\scripts\publish.ps1 -Portable
+```
+
+릴리스에는 항상 단일 exe와 포터블 zip을 함께 올립니다. 한 번에 둘 다 만들려면:
+
+```powershell
+.\scripts\publish.ps1 -All
 ```
 
 결과물은 `artifacts\win-x64\` 아래에 생성됩니다. Visual Studio에서는 게시 프로필

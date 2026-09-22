@@ -178,6 +178,82 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         CommitFrameSets();
     }
 
+    /// <summary>앱이 관리하는 세트 폴더. 드래그앤드롭으로 가져온 파일은 이 아래에 복사된다.</summary>
+    public static string ManagedSetsRoot =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet", "sets");
+
+    /// <summary>
+    /// 탐색기에서 끌어다 놓은 경로들을 가져온다.
+    /// - 세트 카드 위에 놓은 경우(target 지정): 이미지 파일(폴더 안의 파일 포함)을 그 세트 폴더로 복사해 프레임으로 추가
+    /// - 빈 곳에 놓은 경우: 폴더는 그대로 세트로 추가, 파일들은 앱 관리 폴더에 복사해 새 세트 생성
+    /// </summary>
+    public void ImportDroppedPaths(IReadOnlyList<string> paths, FrameSetItemViewModel? target)
+    {
+        try
+        {
+            var folders = paths.Where(Directory.Exists).ToList();
+            var files = paths.Where(p => File.Exists(p) && ImageCache.IsSupported(p)).ToList();
+
+            if (target is not null)
+            {
+                var all = files.Concat(folders.SelectMany(f => ImageCache.ListFolderFiles(f).Select(n => Path.Combine(f, n)))).ToList();
+                var count = all.Count == 0 ? 0 : target.ImportFiles(all);
+                StatusMessage = count == 0
+                    ? "가져올 이미지 파일이 없습니다 (PNG/JPG/BMP/GIF)."
+                    : $"'{target.Name}' 세트에 프레임 {count}개를 추가했습니다.";
+                return;
+            }
+
+            foreach (var folder in folders)
+            {
+                AddFolderAsSet(folder);
+            }
+
+            if (files.Count > 0)
+            {
+                CreateSetFromFiles(files);
+            }
+
+            if (folders.Count == 0 && files.Count == 0)
+            {
+                StatusMessage = "가져올 이미지 파일이나 폴더가 없습니다 (PNG/JPG/BMP/GIF).";
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            DiagnosticsLog.Write("드래그앤드롭 가져오기 실패", ex);
+            System.Windows.MessageBox.Show($"이미지를 가져오지 못했습니다.\n\n{ex.Message}", "Keyboard Pet",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
+    }
+
+    private void AddFolderAsSet(string folder)
+    {
+        var name = UniqueSetName(Path.GetFileName(folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+        FrameSets.Add(new FrameSetItemViewModel(this, new FrameSetSettings(name, folder)));
+        CommitFrameSets();
+        StatusMessage = $"폴더를 '{name}' 세트로 추가했습니다.";
+    }
+
+    private void CreateSetFromFiles(IReadOnlyList<string> files)
+    {
+        var parent = Path.GetFileName(Path.GetDirectoryName(files[0])?.TrimEnd(Path.DirectorySeparatorChar) ?? string.Empty);
+        var name = UniqueSetName(string.IsNullOrWhiteSpace(parent) ? "set" : parent);
+
+        var folder = Path.Combine(ManagedSetsRoot, name);
+        for (var i = 2; Directory.Exists(folder); i++)
+        {
+            folder = Path.Combine(ManagedSetsRoot, $"{name}-{i}");
+        }
+
+        Directory.CreateDirectory(folder);
+        var item = new FrameSetItemViewModel(this, new FrameSetSettings(name, folder));
+        FrameSets.Add(item);
+        var count = item.ImportFiles(files);
+        CommitFrameSets();
+        StatusMessage = $"이미지 {count}개를 복사해 '{name}' 세트를 만들었습니다 ({folder}).";
+    }
+
     [RelayCommand]
     private void BrowseFrameSetFolder(FrameSetItemViewModel item)
     {

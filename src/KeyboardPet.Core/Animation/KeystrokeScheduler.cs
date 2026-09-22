@@ -36,7 +36,17 @@ public sealed class KeystrokeScheduler : IFrameScheduler
 
     public int PendingKeystrokes => _pending;
 
-    public void Start() => IsRunning = true;
+    public void Start()
+    {
+        IsRunning = true;
+        _pending = 0;
+
+        // 복귀 시간이 설정되어 있으면 첫 입력 전까지는 "입력 없음" 상태이므로 복귀 프레임으로 시작한다.
+        if (_idleTimer is not null)
+        {
+            _returnToIdle();
+        }
+    }
 
     public void Stop()
     {

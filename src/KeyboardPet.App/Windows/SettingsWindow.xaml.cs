@@ -63,15 +63,71 @@ public partial class SettingsWindow : Window
 
     private void FrameTile_DragOver(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return; // 탐색기 파일 드롭은 세트 카드/탭 핸들러가 처리한다.
+        }
+
         e.Effects = TryGetDropPair(sender, e, out _, out _) ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void FrameTile_Drop(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return;
+        }
+
         if (TryGetDropPair(sender, e, out var source, out var target))
         {
             source.Owner.MoveFrame(source, target);
+        }
+
+        e.Handled = true;
+    }
+
+    // ── 탐색기에서 이미지/폴더 드래그앤드롭 ──
+
+    private void SetsArea_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void SetsArea_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths && DataContext is SettingsViewModel vm)
+        {
+            vm.ImportDroppedPaths(paths, target: null);
+        }
+
+        e.Handled = true;
+    }
+
+    private void SetCard_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return; // 프레임 타일 간 이동은 타일 핸들러가 처리한다.
+        }
+
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void SetCard_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            return;
+        }
+
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths
+            && DataContext is SettingsViewModel vm
+            && (sender as FrameworkElement)?.DataContext is FrameSetItemViewModel target)
+        {
+            vm.ImportDroppedPaths(paths, target);
         }
 
         e.Handled = true;

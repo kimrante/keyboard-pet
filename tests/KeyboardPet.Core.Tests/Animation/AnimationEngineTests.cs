@@ -150,7 +150,7 @@ public class AnimationEngineTests
     }
 
     [Fact]
-    public void LoopSubset_ResetToFirst_UsesFirstLoopFrame()
+    public void LoopSubset_ReturnToIdle_UsesFirstLoopFrameByDefault()
     {
         var engine = new AnimationEngine(new FakeTimerFactory());
         engine.SetActiveSet(new FrameSet("s", 4, LoopFrames: new[] { 2, 3 }));
@@ -158,8 +158,38 @@ public class AnimationEngineTests
         Assert.Equal(2, engine.FrameIndex);
         engine.Advance();
         Assert.Equal(3, engine.FrameIndex);
-        engine.ResetToFirst();
+        engine.ReturnToIdle();
         Assert.Equal(2, engine.FrameIndex);
+    }
+
+    [Fact]
+    public void IdleFrame_ReturnToIdle_ShowsIdleFrame_ThenAdvanceReentersLoop()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        // 4장 중 0~2번이 루프, 3번은 키 전용이면서 무입력 복귀 프레임
+        engine.SetActiveSet(new FrameSet("s", 4, LoopFrames: new[] { 0, 1, 2 }, IdleFrameIndex: 3));
+        var seen = new List<int>();
+        engine.FrameChanged += seen.Add;
+
+        engine.Advance();          // 1
+        engine.ReturnToIdle();     // 3 (복귀 프레임)
+        engine.ReturnToIdle();     // 변화 없음
+        engine.Advance();          // 루프 첫 프레임 0으로 진입
+        engine.Advance();          // 1
+
+        Assert.Equal(new[] { 1, 3, 0, 1 }, seen);
+    }
+
+    [Fact]
+    public void IdleFrame_OutOfRange_FallsBackToFirstLoopFrame()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        engine.SetActiveSet(new FrameSet("s", 3, LoopFrames: new[] { 1, 2 }, IdleFrameIndex: 99));
+        engine.Advance();
+
+        engine.ReturnToIdle();
+
+        Assert.Equal(1, engine.FrameIndex);
     }
 
     [Fact]
@@ -186,7 +216,7 @@ public class AnimationEngineTests
 
         engine.SetActiveSet(Set(4), resetIndex: true, pinnedFrame: 2);
         engine.Advance();
-        engine.ResetToFirst();
+        engine.ReturnToIdle();
 
         Assert.True(engine.IsPinned);
         Assert.Equal(2, engine.FrameIndex);

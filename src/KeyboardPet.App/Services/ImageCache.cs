@@ -77,7 +77,8 @@ public sealed class ImageCache
         string name,
         string folder,
         IReadOnlyList<string>? frames = null,
-        IReadOnlyList<string>? animationFrames = null)
+        IReadOnlyList<string>? animationFrames = null,
+        string? idleFrame = null)
     {
         if (!Directory.Exists(folder))
         {
@@ -109,6 +110,7 @@ public sealed class ImageCache
 
         var animationSet = animationFrames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var loop = animationSet is null ? null : new List<int>();
+        int? idleIndex = null;
         var bitmaps = new List<BitmapSource>();
         foreach (var file in files)
         {
@@ -116,9 +118,16 @@ public sealed class ImageCache
             var start = bitmaps.Count;
             bitmaps.AddRange(decoded);
 
-            if (loop is not null && animationSet!.Contains(Path.GetFileName(file)))
+            var fileName = Path.GetFileName(file);
+            if (loop is not null && animationSet!.Contains(fileName))
             {
                 loop.AddRange(Enumerable.Range(start, decoded.Count));
+            }
+
+            if (idleIndex is null && idleFrame is not null && decoded.Count > 0
+                && string.Equals(fileName, idleFrame, StringComparison.OrdinalIgnoreCase))
+            {
+                idleIndex = start;   // GIF면 그 파일의 첫 프레임
             }
 
             if (bitmaps.Count >= MaxFramesPerSet)
@@ -127,7 +136,7 @@ public sealed class ImageCache
             }
         }
 
-        return Build(name, files, bitmaps, missing, loop);
+        return Build(name, files, bitmaps, missing, loop, idleIndex);
     }
 
     /// <summary>앱에 내장된 리소스(pack URI)로 세트를 만든다.</summary>
@@ -135,7 +144,7 @@ public sealed class ImageCache
     {
         var uris = packUris.ToList();
         var frames = uris.SelectMany(GetOrDecodeResource).ToList();
-        return Build(name, uris, frames, Array.Empty<string>(), null);
+        return Build(name, uris, frames, Array.Empty<string>(), null, null);
     }
 
     private IReadOnlyList<BitmapSource> GetOrDecodeFile(string path)
@@ -173,7 +182,8 @@ public sealed class ImageCache
         IReadOnlyList<string> sources,
         List<BitmapSource> frames,
         IReadOnlyList<string> missing,
-        List<int>? loop)
+        List<int>? loop,
+        int? idleIndex)
     {
         if (frames.Count > MaxFramesPerSet)
         {
@@ -181,7 +191,8 @@ public sealed class ImageCache
         }
 
         var loopFrames = loop?.Where(i => i < frames.Count).ToList();
-        return new LoadedFrameSet(new FrameSet(name, frames.Count, sources, loopFrames), frames, missing);
+        var idle = idleIndex is int i && i < frames.Count ? idleIndex : null;
+        return new LoadedFrameSet(new FrameSet(name, frames.Count, sources, loopFrames, idle), frames, missing);
     }
 
     private static IEnumerable<BitmapSource> Decode(Uri uri)

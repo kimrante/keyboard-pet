@@ -38,15 +38,17 @@ public class KeystrokeSchedulerTests
     }
 
     [Fact]
-    public void IdleReturnZero_CreatesNoTimer()
+    public void IdleReturnZero_CreatesNoTimer_AndDoesNotReturnToIdleOnStart()
     {
         var timers = new FakeTimerFactory();
-        using var scheduler = new KeystrokeScheduler(timers, 1, TimeSpan.Zero, () => { }, () => { });
+        var returned = 0;
+        using var scheduler = new KeystrokeScheduler(timers, 1, TimeSpan.Zero, () => { }, () => returned++);
         scheduler.Start();
 
         scheduler.OnKeystroke();
 
         Assert.Empty(timers.Created);
+        Assert.Equal(0, returned);
     }
 
     [Fact]
@@ -56,6 +58,8 @@ public class KeystrokeSchedulerTests
         var returned = 0;
         using var scheduler = new KeystrokeScheduler(timers, 2, TimeSpan.FromSeconds(2), () => { }, () => returned++);
         scheduler.Start();
+        Assert.Equal(1, returned);   // 복귀 시간이 설정된 경우 시작 시 복귀 프레임으로
+        returned = 0;
 
         scheduler.OnKeystroke();
         Assert.Equal(TimeSpan.FromSeconds(2), timers.Last.Interval);

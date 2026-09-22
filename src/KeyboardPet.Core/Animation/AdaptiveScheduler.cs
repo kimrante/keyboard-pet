@@ -67,10 +67,15 @@ public sealed class AdaptiveScheduler : IFrameScheduler
         var now = NowMs();
         _keystrokes.Clear();
         _lastKeystrokeMs = now - _idleReturnMs;
-        // 복귀 시간이 설정되어 있으면 첫 키 입력 전까지는 정지 상태로 시작한다(프레임은 이미 0번).
+        // 복귀 시간이 설정되어 있으면 첫 키 입력 전까지는 정지 상태로 시작하고 복귀 프레임을 보여준다.
         _isIdle = _idleReturnMs > 0;
         _timer.Interval = TimeSpan.FromMilliseconds(_slowMs);
         _timer.Start();
+
+        if (_isIdle)
+        {
+            _returnToIdle();
+        }
     }
 
     public void Stop()

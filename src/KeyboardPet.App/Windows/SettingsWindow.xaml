@@ -147,7 +147,9 @@
 
         <!-- ───────── 이미지 세트 ───────── -->
         <TabItem Header="이미지 세트">
-            <Grid Margin="12">
+            <!-- 탭 전체가 드롭 영역: 폴더 → 세트 추가, 이미지 파일 → 새 세트 생성(앱 폴더로 복사). 카드 위는 그 세트에 추가 -->
+            <Grid Margin="12" Background="Transparent" AllowDrop="True"
+                  DragOver="SetsArea_DragOver" Drop="SetsArea_Drop">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -165,7 +167,8 @@
                     <ItemsControl ItemsSource="{Binding FrameSets}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:FrameSetItemViewModel}">
-                                <Border Style="{StaticResource ItemCard}">
+                                <Border Style="{StaticResource ItemCard}" AllowDrop="True"
+                                        DragOver="SetCard_DragOver" Drop="SetCard_Drop">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
@@ -261,11 +264,24 @@
                                                         </Style>
                                                     </TextBlock.Style>
                                                 </TextBlock>
-                                                <TextBlock Text="· 순서 편집됨" Foreground="#3A7BD5" FontSize="11.5" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                <TextBlock Text="· 순서 편집됨" Foreground="#0D6EFD" FontSize="11.5" Margin="6,0,0,0" VerticalAlignment="Center"
                                                            Visibility="{Binding HasCustomFrames, Converter={StaticResource BoolToVis}}" />
                                                 <Button Content="폴더 순서로 되돌리기" Style="{StaticResource SmallButton}" Margin="10,0,0,0" FontSize="11.5"
                                                         Command="{Binding ResetFramesCommand}"
                                                         Visibility="{Binding HasCustomFrames, Converter={StaticResource BoolToVis}}" />
+
+                                                <TextBlock Text="무입력 복귀 프레임:" FontSize="11.5" Margin="16,0,6,0" VerticalAlignment="Center" Foreground="#495057" />
+                                                <ComboBox Width="190" MinHeight="26" FontSize="12" ItemsSource="{Binding IdleFrameChoices}" SelectedItem="{Binding SelectedIdleFrame}"
+                                                          ToolTip="타수 기반·타이핑 속도 연동 모드에서 입력이 멈추면 보여줄 프레임입니다. 시작 직후에도 이 프레임으로 대기하며, 키 전용 프레임도 고를 수 있습니다.">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type vm:IdleFrameChoice}">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <Image Source="{Binding Entry.Thumbnail}" Width="18" Height="18" Margin="0,0,5,0" Stretch="Uniform" />
+                                                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
                                             </StackPanel>
                                         </StackPanel>
                                     </Grid>
@@ -276,9 +292,25 @@
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="2">
+                    <!-- 드롭 안내: 세트가 없을 때 크게, 있을 때는 한 줄로 -->
+                    <Border BorderBrush="#86B7FE" BorderThickness="1.5" CornerRadius="8" Background="#F8FBFF" Padding="16" Margin="0,0,0,10">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FrameSets.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock TextAlignment="Center" Foreground="#0D6EFD" FontSize="13"
+                                   Text="이미지 파일이나 폴더를 이 탭에 끌어다 놓으면 세트가 만들어집니다.&#10;폴더는 그대로 세트가 되고, 파일들은 앱 폴더에 복사되어 새 세트가 됩니다." />
+                    </Border>
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="#0D6EFD" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4" />
                     <TextBlock Text="{Binding BuiltInSummary}" Foreground="#444" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource Hint}"
-                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 타일의 체크를 풀면 그 프레임은 루프 애니메이션에서 빠지고 키 매핑의 프레임 선택에서만 쓰입니다(키 전용). 편집한 내용은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다. 이름·폴더 입력은 다른 곳을 클릭하면 적용됩니다." />
+                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 이미지 파일이나 폴더를 탭에 끌어다 놓으면 세트가 추가되고, 세트 카드 위에 놓으면 그 세트에 프레임이 추가됩니다. 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 타일의 체크를 풀면 그 프레임은 루프 애니메이션에서 빠지고 키 매핑의 프레임 선택에서만 쓰입니다(키 전용). '무입력 복귀 프레임'은 타이핑이 멈췄을 때 보여줄 프레임입니다. 편집한 내용은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다." />
                 </StackPanel>
             </Grid>
         </TabItem>

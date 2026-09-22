@@ -48,6 +48,16 @@ public class FrameSetTests
     }
 
     [Fact]
+    public void IdleIndex_UsesIdleFrame_OrFirstLoopFrame()
+    {
+        Assert.Equal(0, new FrameSet("s", 4).IdleIndex);
+        Assert.Equal(2, new FrameSet("s", 4, LoopFrames: new[] { 2, 3 }).IdleIndex);
+        Assert.Equal(3, new FrameSet("s", 4, LoopFrames: new[] { 0, 1 }, IdleFrameIndex: 3).IdleIndex);
+        Assert.Equal(0, new FrameSet("s", 4, IdleFrameIndex: 4).IdleIndex);   // 범위 밖 → 루프 첫 프레임
+        Assert.Equal(0, new FrameSet("s", 4, IdleFrameIndex: -1).IdleIndex);
+    }
+
+    [Fact]
     public void EmptyLoop_NeverAdvances_AndFirstIsZero()
     {
         var set = new FrameSet("s", 4, LoopFrames: Array.Empty<int>());
