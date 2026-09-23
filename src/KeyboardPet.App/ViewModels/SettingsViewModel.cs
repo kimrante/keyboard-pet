@@ -25,6 +25,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _syncing;
     private RuleItemViewModel? _captureTarget;
 
+    /// <summary>저장이 미뤄진 동안 삭제된 세트 이름. 다음 저장 때 그 세트의 설정도 함께 지운다.</summary>
+    private readonly List<string> _pendingRemovals = new();
+
     // ── 일반 ──
     [ObservableProperty] private bool _isTopmost;
     [ObservableProperty] private double _scale;
@@ -140,13 +143,34 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// <param name="removedName">삭제된 세트의 이름. 그 세트에 귀속된 설정도 함께 지운다.</param>
     public void CommitFrameSets(string? removedName = null)
     {
-        // 이름을 비운 세트가 있으면 이름이 다시 채워질 때까지 저장을 미룬다. 그대로 저장하면 이름 없는 세트는
-        // 정규화에서 빠지고, 카드와 그 세트에 귀속된 설정이 함께 사라진다.
+        if (removedName is not null)
+        {
+            _pendingRemovals.Add(removedName);
+        }
+
+        // 이름이 비었거나 겹치는 세트가 있으면 고칠 때까지 저장을 미룬다. 그대로 저장하면 이름 없는 세트는
+        // 정규화에서 빠지고(카드와 설정이 함께 사라짐), 겹치는 이름은 세트에 귀속된 설정을 서로 덮어쓴다.
         if (FrameSets.Any(f => string.IsNullOrWhiteSpace(f.Name)))
         {
             StatusMessage = "세트 이름을 입력하세요. 이름이 비어 있는 동안에는 세트 변경이 저장되지 않습니다.";
             return;
         }
+
+        var duplicate = FrameSets
+            .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+        {
+            StatusMessage = $"세트 이름 '{duplicate.Key}'이(가) 겹칩니다. 이름을 바꿀 때까지 세트 변경이 저장되지 않습니다.";
+            return;
+        }
+
+        // 삭제는 이름 변경보다 먼저 적용한다(삭제한 세트의 이름을 다른 세트가 이어받는 경우 옛 설정을 먼저 지운다).
+        var removals = _pendingRemovals
+            .Where(name => !FrameSets.Any(f => string.Equals(f.CommittedName, name, StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _pendingRemovals.Clear();
 
         var renames = FrameSets
             .Where(f => !string.Equals(f.CommittedName, f.Name.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -156,7 +180,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         Push(s =>
         {
             // 세트에 귀속된 설정(애니메이션·키 매핑)과 사용 중인 세트 참조가 이름 변경·삭제를 따라가게 한다.
-            var next = removedName is null ? s : s.WithSetRemoved(removedName);
+            var next = removals.Aggregate(s, (acc, name) => acc.WithSetRemoved(name));
             next = renames.Aggregate(next, (acc, r) => acc.WithSetRenamed(r.Old, r.New));
             return next with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() };
         });
@@ -205,10 +229,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private void RemoveFrameSet(FrameSetItemViewModel item)
     {
         FrameSets.Remove(item);
-
-        // 같은 이름의 세트가 남아 있으면(중복 이름) 설정은 그 세트가 계속 쓴다.
-        var stillUsed = FrameSets.Any(f => string.Equals(f.CommittedName, item.CommittedName, StringComparison.OrdinalIgnoreCase));
-        CommitFrameSets(stillUsed ? null : item.CommittedName);
+        CommitFrameSets(item.CommittedName);
     }
 
     /// <summary>폴더 없이 빈 세트를 만든다. 앱 관리 폴더를 만들어 두고, 이미지는 카드에 끌어다 넣는다.</summary>

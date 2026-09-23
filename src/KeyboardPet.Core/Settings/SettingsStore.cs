@@ -20,6 +20,7 @@ public sealed class SettingsStore
     };
 
     // 역직렬화(JsonOptions)와 같은 관대함으로 읽는다: 대소문자 무시, 주석·후행 쉼표 허용.
+    // JsonDocument 단계에서는 빈 파일도 JsonException이 된다.
     private static readonly JsonNodeOptions NodeOptions = new() { PropertyNameCaseInsensitive = true };
 
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -53,10 +54,12 @@ public sealed class SettingsStore
 
         try
         {
-            var json = File.ReadAllText(FilePath);
-            var loaded = SettingsMigration.NeedsMigration(json, DocumentOptions)
-                ? MigrateAndDeserialize(json)
-                : JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
+            // 한 번만 파싱한다. 현재 버전 파일은 문서에서 바로 역직렬화하고(중복 속성 등에 관대),
+            // 옛 버전 파일만 JSON 트리로 바꿔 변환한 뒤 역직렬화한다.
+            using var document = JsonDocument.Parse(File.ReadAllText(FilePath), DocumentOptions);
+            var loaded = SettingsMigration.NeedsMigration(document.RootElement)
+                ? MigrateAndDeserialize(document.RootElement)
+                : document.Deserialize<AppSettings>(JsonOptions);
 
             return (loaded ?? throw new JsonException("설정 파일이 비어 있습니다.")).Normalized();
         }
@@ -70,9 +73,9 @@ public sealed class SettingsStore
         }
     }
 
-    private static AppSettings? MigrateAndDeserialize(string json)
+    private static AppSettings? MigrateAndDeserialize(JsonElement element)
     {
-        var root = JsonNode.Parse(json, NodeOptions, DocumentOptions) as JsonObject
+        var root = JsonObject.Create(element, NodeOptions)
                    ?? throw new JsonException("설정 파일이 객체가 아닙니다.");
         SettingsMigration.Migrate(root);
         return root.Deserialize<AppSettings>(JsonOptions);

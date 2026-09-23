@@ -73,7 +73,7 @@ public sealed class AnimationService : IDisposable
         _settings.Changed += OnSettingsChanged;
 
         ReloadAll(_settings.Current);
-        _engine.ApplyOptions(_settings.Current.AnimationOf(DefaultSetName));
+        _engine.ApplyOptions(_settings.Current.EffectiveAnimation);
         _engine.Start();
     }
 
@@ -111,22 +111,22 @@ public sealed class AnimationService : IDisposable
         var setsChanged = !AppSettings.FrameSetsEqual(old.FrameSets, @new.FrameSets)
                           || !string.Equals(old.DefaultFrameSet, @new.DefaultFrameSet, StringComparison.OrdinalIgnoreCase);
 
-        // 규칙과 애니메이션 옵션은 실제로 쓰는 세트(DefaultSetName)의 프로필을 따른다.
-        var oldSet = DefaultSetName;
+        // 규칙과 애니메이션 옵션은 고른 세트의 프로필을 따른다(EffectiveRules / EffectiveAnimation).
+        // 고른 세트에 프레임이 없어 예시 세트가 대신 보일 때도 설정 창·트레이에서 편집한 값이 그대로 반영되도록 한다.
         if (setsChanged)
         {
             ReloadAll(@new);
         }
-        else if (!AppSettings.RulesEqual(old.RulesOf(oldSet), @new.RulesOf(oldSet)))
+        else if (!AppSettings.RulesEqual(old.EffectiveRules, @new.EffectiveRules))
         {
-            ConfigureRules(@new.RulesOf(DefaultSetName));
+            ConfigureRules(@new.EffectiveRules);
             ShowDefault();
             Reloaded?.Invoke();
         }
 
-        if (old.AnimationOf(oldSet) != @new.AnimationOf(DefaultSetName))
+        if (old.EffectiveAnimation != @new.EffectiveAnimation)
         {
-            _engine.ApplyOptions(@new.AnimationOf(DefaultSetName));
+            _engine.ApplyOptions(@new.EffectiveAnimation);
         }
     }
 
@@ -134,7 +134,7 @@ public sealed class AnimationService : IDisposable
     {
         LoadSets(s.FrameSets);
         DefaultSetName = _sets.ContainsKey(s.DefaultFrameSet) ? s.DefaultFrameSet : AppSettings.BuiltInDefaultSet;
-        ConfigureRules(s.RulesOf(DefaultSetName));
+        ConfigureRules(s.EffectiveRules);
         ShowDefault();
         Reloaded?.Invoke();
     }
@@ -188,7 +188,7 @@ public sealed class AnimationService : IDisposable
     {
         _rules?.Dispose();
 
-        // 규칙은 모두 사용 중인 세트의 프레임을 가리킨다.
+        // 규칙은 모두 화면에 쓰는 세트의 프레임을 가리킨다.
         var frameCount = _sets.TryGetValue(DefaultSetName, out var set) ? set.Set.FrameCount : 0;
         var errors = new List<string>();
         var list = rules.ToList();

@@ -77,6 +77,21 @@ public class SetProfileTests
     }
 
     [Fact]
+    public void WithSetRenamed_ToNameWithProfile_DoesNotOverwriteIt()
+    {
+        var s = new AppSettings()
+            .WithEffectiveRules(new[] { new KeyRule("E", FrameIndex: 1) })           // 예시 세트의 설정
+            with { DefaultFrameSet = "cat" };
+        s = s.WithEffectiveRules(new[] { new KeyRule("C") });
+
+        var renamed = s.WithSetRenamed("cat", AppSettings.ExampleSetName);
+
+        Assert.Equal(AppSettings.ExampleSetName, renamed.DefaultFrameSet);
+        Assert.Equal(new[] { "E" }, renamed.EffectiveRules[0].Keys);                // 기존 설정 유지
+        Assert.Null(renamed.ProfileOf("cat"));
+    }
+
+    [Fact]
     public void WithSetRemoved_DropsProfile_AndFallsBackToExample()
     {
         var s = new AppSettings { DefaultFrameSet = "cat" }

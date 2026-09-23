@@ -12,36 +12,41 @@ public static class SettingsMigration
     /// <summary>v1까지 있던 내장 세트. v2에서는 jump 이미지만 '예시' 세트로 남았다.</summary>
     private static readonly string[] RemovedBuiltInSets = { "idle", "jump", "typing" };
 
+    /// <summary>이미지가 '예시' 세트로 이어진 옛 내장 세트. 나머지(idle, typing)는 이미지가 삭제되었다.</summary>
+    private const string SurvivingBuiltInSet = "jump";
+
     /// <summary>
     /// 파일이 현재 버전보다 오래되어 변환이 필요한지. 최상위가 객체가 아니면 JsonException.
-    /// 현재 버전 파일은 기존처럼 바로 역직렬화하도록(중복 속성 등에 관대하게) 여기서 가려낸다.
+    /// version이 없으면 v1 전용 필드(최상위 animation/rules)가 있을 때만 옛 파일로 본다.
+    /// 숫자가 아닌 version은 역직렬화에서 손상 파일로 처리되도록 변환하지 않는다.
     /// </summary>
-    public static bool NeedsMigration(string json, JsonDocumentOptions options)
+    public static bool NeedsMigration(JsonElement root)
     {
-        using var document = JsonDocument.Parse(json, options);
-        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        if (root.ValueKind != JsonValueKind.Object)
         {
             throw new JsonException("설정 파일이 객체가 아닙니다.");
         }
 
-        foreach (var property in document.RootElement.EnumerateObject())
+        var hasV1Fields = false;
+        foreach (var property in root.EnumerateObject())
         {
             if (string.Equals(property.Name, "version", StringComparison.OrdinalIgnoreCase))
             {
-                return !(property.Value.TryGetInt32(out var version) && version >= AppSettings.CurrentVersion);
+                return property.Value.TryGetInt32(out var version) && version < AppSettings.CurrentVersion;
             }
+
+            hasV1Fields |= string.Equals(property.Name, "animation", StringComparison.OrdinalIgnoreCase)
+                           || string.Equals(property.Name, "rules", StringComparison.OrdinalIgnoreCase);
         }
 
-        return true;
+        return hasV1Fields;
     }
 
+    /// <summary>옛 버전(v1) 파일을 v2 구조로 바꾼다. <see cref="NeedsMigration"/>가 true일 때만 호출한다.</summary>
     public static void Migrate(JsonObject root)
     {
-        if (ReadVersion(root) < 2)
-        {
-            MigrateV1ToV2(root);
-            root["version"] = 2;
-        }
+        MigrateV1ToV2(root);
+        root["version"] = 2;
     }
 
     /// <summary>
@@ -51,17 +56,31 @@ public static class SettingsMigration
     private static void MigrateV1ToV2(JsonObject root)
     {
         var userSets = (root["frameSets"] as JsonArray ?? new JsonArray())
-            .Select(n => Str(n?["name"])?.Trim())
+            .Select(n => n is JsonObject set ? Str(set["name"])?.Trim() : null)
             .Where(n => !string.IsNullOrEmpty(n))
             .Select(n => n!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        bool IsRemovedBuiltIn(string name) =>
+            RemovedBuiltInSets.Contains(name, StringComparer.OrdinalIgnoreCase) && !userSets.Contains(name);
+
+        // 세트 이름(사용 중인 세트, 프로필 키): 없어진 내장 세트는 모두 예시로.
         string MapName(string name)
         {
             name = name.Trim();
-            return RemovedBuiltInSets.Contains(name, StringComparer.OrdinalIgnoreCase) && !userSets.Contains(name)
-                ? AppSettings.ExampleSetName
-                : name;
+            return IsRemovedBuiltIn(name) ? AppSettings.ExampleSetName : name;
+        }
+
+        // 규칙 대상: 프레임 번호가 그대로 통하는 jump만 예시로 잇고, 이미지가 사라진 idle/typing 대상 규칙은 버린다.
+        string? MapRuleTarget(string name)
+        {
+            name = name.Trim();
+            if (!IsRemovedBuiltIn(name))
+            {
+                return name;
+            }
+
+            return string.Equals(name, SurvivingBuiltInSet, StringComparison.OrdinalIgnoreCase) ? AppSettings.ExampleSetName : null;
         }
 
         var oldDefault = Str(root["defaultFrameSet"])?.Trim();
@@ -91,7 +110,7 @@ public static class SettingsMigration
                 profile["animation"] = animation.DeepClone();
             }
 
-            if (ConvertRules(oldProfile?["rules"] as JsonArray ?? globalRules, set, MapName) is { } rules)
+            if (ConvertRules(oldProfile?["rules"] as JsonArray ?? globalRules, set, MapRuleTarget) is { } rules)
             {
                 profile["rules"] = rules;
             }
@@ -112,7 +131,7 @@ public static class SettingsMigration
     /// 세트 <paramref name="set"/>를 가리키던 규칙만 남긴다. 규칙 목록이 없거나 v1 기본 규칙 그대로면 null(세트 기본 규칙 사용).
     /// 사용자가 규칙을 편집했었다면 남는 규칙이 없더라도 빈 목록으로 두어 샘플 규칙이 되살아나지 않게 한다.
     /// </summary>
-    private static JsonArray? ConvertRules(JsonArray? rules, string set, Func<string, string> mapName)
+    private static JsonArray? ConvertRules(JsonArray? rules, string set, Func<string, string?> mapTarget)
     {
         if (rules is null || IsV1DefaultRules(rules))
         {
@@ -122,7 +141,7 @@ public static class SettingsMigration
         var kept = new JsonArray();
         foreach (var rule in rules.OfType<JsonObject>())
         {
-            if (Str(rule["frameSet"]) is { } target && string.Equals(mapName(target), set, StringComparison.OrdinalIgnoreCase))
+            if (Str(rule["frameSet"]) is { } target && string.Equals(mapTarget(target), set, StringComparison.OrdinalIgnoreCase))
             {
                 var copy = (JsonObject)rule.DeepClone();
                 copy.Remove("frameSet");
@@ -147,8 +166,6 @@ public static class SettingsMigration
         && o["frameIndex"] is null
         && Int(o["holdMs"]) == (key == "*" ? 600 : 800)
         && Bool(o["resetIndex"]) == (key != "*");
-
-    private static int ReadVersion(JsonObject root) => Int(root["version"]) ?? 0;
 
     private static int? Int(JsonNode? node) =>
         node is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;

@@ -148,7 +148,10 @@ public sealed partial class RuleItemViewModel : ObservableObject
 
         if (SelectedFrame?.Thumbnail is null && FrameIndex is int missing)
         {
-            Error = $"사용 중인 세트에 {(long)missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다.";
+            // 세트에 프레임이 하나도 없으면(빈 세트·폴더 없음) 예시 세트가 대신 보이므로 '마지막 프레임' 안내는 맞지 않다.
+            Error = FrameChoices.Any(c => c.Thumbnail is not null)
+                ? $"사용 중인 세트에 {(long)missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다."
+                : $"사용 중인 세트에 표시할 프레임이 없습니다. 이미지를 추가하면 {(long)missing + 1}번 프레임이 쓰입니다.";
             return;
         }
 

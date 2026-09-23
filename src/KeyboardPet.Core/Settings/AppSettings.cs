@@ -152,7 +152,11 @@ public sealed record AppSettings
     public AppSettings WithEffectiveRules(IReadOnlyList<KeyRule> rules) =>
         WithProfile(DefaultFrameSet, p => p with { Rules = rules });
 
-    /// <summary>세트 이름이 바뀌면 프로필과 사용 중인 세트 참조도 따라가게 한다.</summary>
+    /// <summary>
+    /// 세트 이름이 바뀌면 프로필과 사용 중인 세트 참조도 따라가게 한다.
+    /// 새 이름에 이미 프로필이 있으면(예: 예시 세트를 대체하는 이름) 덮어쓰지 않는다. 설정은 이름에 귀속되므로
+    /// 그 세트는 그 이름의 기존 설정을 이어받고, 옛 이름의 프로필은 버린다.
+    /// </summary>
     public AppSettings WithSetRenamed(string oldName, string newName)
     {
         if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)
@@ -164,7 +168,7 @@ public sealed record AppSettings
         var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase);
         if (profiles.Remove(oldName, out var moved))
         {
-            profiles[newName] = moved;
+            profiles.TryAdd(newName, moved);
         }
 
         return this with

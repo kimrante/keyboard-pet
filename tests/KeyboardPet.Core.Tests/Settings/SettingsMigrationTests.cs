@@ -137,6 +137,63 @@ public sealed class SettingsMigrationTests : IDisposable
     }
 
     [Fact]
+    public void RulesForDeletedIdleAndTypingImages_AreDropped_JumpRulesKept()
+    {
+        var s = LoadJson("""
+            {
+              "version": 1,
+              "defaultFrameSet": "idle",
+              "rules": [
+                { "keys": ["Space"], "frameSet": "idle", "frameIndex": 3 },
+                { "keys": ["Tab"], "frameSet": "typing" },
+                { "keys": ["Enter"], "frameSet": "jump", "holdMs": 500, "frameIndex": 1 }
+              ]
+            }
+            """);
+
+        Assert.Single(s.EffectiveRules);
+        Assert.Equal(new[] { "Enter" }, s.EffectiveRules[0].Keys);
+        Assert.Equal(1, s.EffectiveRules[0].FrameIndex);
+    }
+
+    [Fact]
+    public void NonObjectFrameSetEntries_DoNotCrash()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{ "version": 1, "frameSets": [ "cat", 1, null ], "rules": [] }""");
+        var store = new SettingsStore(FilePath);
+
+        var s = store.Load();   // 역직렬화 단계에서 손상 파일로 처리되고 예외가 새지 않아야 한다
+
+        Assert.NotNull(store.LastLoadError);
+        Assert.Equal(AppSettings.BuiltInDefaultSet, s.DefaultFrameSet);
+    }
+
+    [Fact]
+    public void MissingVersion_WithoutV1Fields_IsReadAsCurrent()
+    {
+        var s = LoadJson("""
+            {
+              "defaultFrameSet": "cat",
+              "frameSets": [ { "name": "cat", "folder": "C:\\cat" } ],
+              "setProfiles": { "cat": { "rules": [ { "keys": ["A"], "frameIndex": 2 } ] } }
+            }
+            """);
+
+        Assert.Single(s.EffectiveRules);
+        Assert.Equal(2, s.EffectiveRules[0].FrameIndex);
+    }
+
+    [Fact]
+    public void MissingVersion_WithV1Fields_IsMigrated()
+    {
+        var s = LoadJson("""{ "defaultFrameSet": "idle", "animation": { "mode": "Random" } }""");
+
+        Assert.Equal(AppSettings.ExampleSetName, s.DefaultFrameSet);
+        Assert.Equal(FrameMode.Random, s.EffectiveAnimation.Mode);
+    }
+
+    [Fact]
     public void DeliberatelyEmptyRules_StayEmpty()
     {
         var s = LoadJson("""{ "version": 1, "defaultFrameSet": "idle", "rules": [] }""");
@@ -158,8 +215,8 @@ public sealed class SettingsMigrationTests : IDisposable
             }
             """);
 
-        // jump·typing 모두 예시로 바뀌므로 두 규칙이 예시 세트에 남는다(첫 규칙의 편집 내용 유지).
-        Assert.Equal(2, s.EffectiveRules.Count);
+        // jump 규칙은 편집 내용 그대로 예시 세트에 남고, 이미지가 사라진 typing 규칙은 버려진다.
+        Assert.Single(s.EffectiveRules);
         Assert.Equal(2000, s.EffectiveRules[0].HoldMs);
         Assert.Equal(1, s.EffectiveRules[0].FrameIndex);
     }
