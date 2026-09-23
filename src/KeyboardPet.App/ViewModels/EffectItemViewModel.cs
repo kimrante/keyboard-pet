@@ -117,7 +117,7 @@ public sealed partial class EffectItemViewModel : ObservableObject
     public string PeriodText => $"{PeriodMs} ms";
 
     public string FramesSummary => AllFrames
-        ? "모든 프레임"
+        ? string.Empty
         : _selectedFrames.Count == 0 ? "선택한 프레임 없음 (효과가 나타나지 않음)" : string.Join(", ", _selectedFrames.Select(i => $"{i + 1}번")) + " 프레임";
 
     public FrameEffect ToEffect() => new(
