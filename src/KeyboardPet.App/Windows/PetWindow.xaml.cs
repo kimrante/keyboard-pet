@@ -3,7 +3,9 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using KeyboardPet.App.Services;
 using KeyboardPet.App.ViewModels;
 using KeyboardPet.Core.Effects;
@@ -23,18 +25,30 @@ public partial class PetWindow : Window
     private Thickness _effectMargin;
     private (double Width, double Height) _frameSize;
 
+    // 효과가 움직이는 동안만 쓰는 비트맵 캐시: 이미지를 한 번 래스터라이즈해 두고 프레임마다 변형만 한다.
+    private readonly BitmapCache _effectCache = new();
+    private bool _effectActive;
+
+    // 전경 창이 바뀔 때만 Topmost를 다시 적용한다(전체화면 앱이 위로 올라오는 순간). 델리게이트는 GC 방지용 필드.
+    private readonly WinEventDelegate _foregroundChanged;
+    private IntPtr _foregroundHook;
+    private readonly DispatcherTimer _topmostFollowUp;
+    private readonly AnimationService _animation;
+    private bool _sessionLocked;
+
     /// <summary>
     /// true인 동안은 크기가 바뀔 때마다 작업 영역 우하단에 자동 정렬한다.
     /// 저장된 위치가 있거나 사용자가 드래그로 옮기면 false가 된다.
     /// </summary>
     private bool _autoAnchor = true;
 
-    public PetWindow(ShellViewModel shell, SettingsService settings, EffectService effects)
+    public PetWindow(ShellViewModel shell, SettingsService settings, EffectService effects, AnimationService animation)
     {
         InitializeComponent();
         _shell = shell;
         _settings = settings;
         _effects = effects;
+        _animation = animation;
         DataContext = shell;
         ContextMenu = ContextMenuFactory.Create(shell);
 
@@ -63,13 +77,97 @@ public partial class PetWindow : Window
         _effects.TransformChanged += ApplyEffect;
         ApplyEffect(_effects.Current);
 
-        // 전체화면 앱이나 다른 Topmost 창이 위로 올라오면 WPF의 Topmost만으로는 밀릴 수 있어 주기적으로 재적용한다.
-        _topmostTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
-        _topmostTimer.Tick += (_, _) => ReassertTopmost();
-        _topmostTimer.Start();
+        // 전체화면 앱이나 다른 Topmost 창이 위로 올라오면 WPF의 Topmost만으로는 밀릴 수 있다.
+        // 주기 타이머로 깨우는 대신, 전경 창이 바뀌는 순간에만 다시 적용한다.
+        // 전체화면 앱은 전경 이벤트 뒤에 z순서를 한 번 더 바꾸기도 하므로, 잠깐 뒤 한 번 더 적용하고 멈추는 단발 타이머를 둔다.
+        _foregroundChanged = OnForegroundChanged;
+        _topmostFollowUp = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(500) };
+        _topmostFollowUp.Tick += (_, _) =>
+        {
+            _topmostFollowUp.Stop();
+            ReassertTopmost();
+        };
+        SourceInitialized += (_, _) => InstallForegroundHook();
+        Closed += (_, _) =>
+        {
+            RemoveForegroundHook();
+            _topmostFollowUp.Stop();
+            SystemEvents.SessionSwitch -= OnSessionSwitch;
+        };
+
+        // 아무도 보지 않는 동안(창 숨김, 세션 잠금)은 애니메이션·효과 계산을 멈춘다.
+        IsVisibleChanged += (_, _) => UpdatePaused();
+        SystemEvents.SessionSwitch += OnSessionSwitch;
     }
 
-    private readonly DispatcherTimer _topmostTimer;
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        var locked = e.Reason switch
+        {
+            SessionSwitchReason.SessionLock or SessionSwitchReason.ConsoleDisconnect or SessionSwitchReason.RemoteDisconnect => true,
+            SessionSwitchReason.SessionUnlock or SessionSwitchReason.ConsoleConnect or SessionSwitchReason.RemoteConnect => false,
+            _ => (bool?)null,
+        } ?? _sessionLocked;
+
+        if (locked != _sessionLocked)
+        {
+            _sessionLocked = locked;
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, UpdatePaused);
+        }
+    }
+
+    private void UpdatePaused()
+    {
+        var paused = !IsVisible || _sessionLocked;
+        _animation.SetPaused(paused);
+        _effects.SetSuspended(paused);
+    }
+
+    /// <summary>
+    /// 데스크톱 펫은 닫히지 않는다: Alt+F4 등으로 닫으면 숨기기만 한다(닫힌 창이 구독·훅을 쥔 채 남지 않도록).
+    /// 종료는 트레이 메뉴로 하며, Application.Shutdown은 이 취소를 무시하고 창을 닫는다.
+    /// </summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (!e.Cancel)
+        {
+            e.Cancel = true;
+            Hide();
+        }
+    }
+
+    private void InstallForegroundHook()
+    {
+        if (_foregroundHook == IntPtr.Zero)
+        {
+            _foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero, _foregroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
+        }
+    }
+
+    private void RemoveForegroundHook()
+    {
+        if (_foregroundHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_foregroundHook);
+            _foregroundHook = IntPtr.Zero;
+        }
+    }
+
+    private void OnForegroundChanged(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+    {
+        // 훅을 설치한 스레드(UI)에서 호출된다. 예외가 새면 안 되므로 가볍게 처리한다.
+        try
+        {
+            ReassertTopmost();
+            _topmostFollowUp.Stop();
+            _topmostFollowUp.Start();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsLog.Write("Topmost 재적용 실패", ex);
+        }
+    }
 
     private void ReassertTopmost()
     {
@@ -113,7 +211,7 @@ public partial class PetWindow : Window
         }
         else if (e.PropertyName is nameof(ShellViewModel.FrameWidth) or nameof(ShellViewModel.FrameHeight))
         {
-            // 이동량은 이미지 크기에 비례하므로 크기가 실제로 바뀐 프레임에서만 다시 적용한다(프레임마다 두 번 통지됨).
+            // 이동량은 이미지 크기에 비례하므로 크기가 바뀌면 다시 적용한다(너비·높이가 함께 바뀌면 한 번만).
             var size = (_shell.FrameWidth, _shell.FrameHeight);
             if (size != _frameSize)
             {
@@ -127,6 +225,16 @@ public partial class PetWindow : Window
     private void ApplyEffect(EffectTransform t)
     {
         _frameSize = (_shell.FrameWidth, _shell.FrameHeight);
+
+        // 효과가 움직이는 동안은 프레임마다 다시 그려지므로, 고품질(Fant) 리샘플링 대신 캐시된 비트맵을 선형 보간으로 변형한다.
+        var active = !t.IsIdentity;
+        if (active != _effectActive)
+        {
+            _effectActive = active;
+            FrameImage.CacheMode = active ? _effectCache : null;
+            RenderOptions.SetBitmapScalingMode(FrameImage, active ? BitmapScalingMode.Linear : BitmapScalingMode.HighQuality);
+        }
+
         EffectScale.ScaleX = t.ScaleX;
         EffectScale.ScaleY = t.ScaleY;
         EffectRotate.Angle = t.Angle;
@@ -219,4 +327,16 @@ public partial class PetWindow : Window
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    private delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 }

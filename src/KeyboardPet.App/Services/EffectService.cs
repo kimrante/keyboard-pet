@@ -41,6 +41,7 @@ public sealed class EffectService : IDisposable
     private readonly EffectClock _clock;
     private readonly EffectMixer _mixer = new();
     private bool _running;
+    private bool _suspended;
 
     public EffectService(AnimationService animation, SettingsService settings, ShellViewModel shell, EffectClock clock)
     {
@@ -62,6 +63,25 @@ public sealed class EffectService : IDisposable
         _animation.RuleActivated += OnRuleActivated;
         _animation.FrameChanged += OnFrameChanged;
         EnsureRunning();
+    }
+
+    /// <summary>펫 창이 숨겨졌거나 세션이 잠긴 동안 계산을 멈춘다. 풀리면 필요할 때 다시 돈다.</summary>
+    public void SetSuspended(bool suspended)
+    {
+        if (_suspended == suspended)
+        {
+            return;
+        }
+
+        _suspended = suspended;
+        if (suspended)
+        {
+            Stop();
+        }
+        else
+        {
+            EnsureRunning();
+        }
     }
 
     /// <summary>지금 시각으로 한 번 계산해 반영한다.</summary>
@@ -119,7 +139,7 @@ public sealed class EffectService : IDisposable
 
     private void EnsureRunning()
     {
-        if (_running || _mixer.IsIdle(_animation.CurrentFrameIndex, _animation.ActiveRule?.Effects))
+        if (_running || _suspended || _mixer.IsIdle(_animation.CurrentFrameIndex, _animation.ActiveRule?.Effects))
         {
             return;
         }

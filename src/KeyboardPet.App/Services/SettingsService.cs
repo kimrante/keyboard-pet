@@ -7,12 +7,18 @@ namespace KeyboardPet.App.Services;
 
 /// <summary>
 /// 앱의 단일 설정 원천. <see cref="Current"/>는 불변이며 <see cref="Update"/>로만 바뀐다.
-/// 변경은 즉시 <see cref="Changed"/>로 전파되고, 파일 저장은 0.5초 디바운스로 묶어서 수행한다.
+/// 변경은 즉시 <see cref="Changed"/>로 전파되고, 파일 저장은 0.5초 디바운스로 묶은 뒤 백그라운드 스레드에서 수행한다
+/// (UI 스레드가 디스크·백신 검사를 기다리지 않도록). 저장은 한 번에 하나만 돌고, 그 사이 바뀐 설정은 마지막 것만 이어서 쓴다.
 /// </summary>
 public sealed class SettingsService : IDisposable
 {
     private readonly SettingsStore _store;
     private readonly DispatcherTimer _saveTimer;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+    private readonly object _gate = new();
+    private AppSettings? _pending;      // 아직 쓰지 않은 최신 스냅샷
+    private bool _saving;               // 저장 루프가 돌고 있는지
+    private Task _inFlight = Task.CompletedTask;
     private bool _dirty;
 
     public SettingsService(SettingsStore store)
@@ -22,7 +28,7 @@ public sealed class SettingsService : IDisposable
         {
             Interval = TimeSpan.FromMilliseconds(500),
         };
-        _saveTimer.Tick += (_, _) => SaveNow();
+        _saveTimer.Tick += (_, _) => QueueSave();
     }
 
     public AppSettings Current { get; private set; } = AppSettings.Default;
@@ -61,7 +67,32 @@ public sealed class SettingsService : IDisposable
         ScheduleSave();
     }
 
+    /// <summary>바뀐 설정을 지금 큐에 넣고, 진행 중인 저장이 끝날 때까지 기다린다(종료 시).</summary>
     public void SaveNow()
+    {
+        QueueSave();
+        Task inFlight;
+        lock (_gate)
+        {
+            inFlight = _inFlight;
+        }
+
+        try
+        {
+            inFlight.Wait(TimeSpan.FromSeconds(3));
+        }
+        catch (AggregateException)
+        {
+            // 저장 루프 안에서 이미 기록·보고한 오류
+        }
+    }
+
+    public void Dispose()
+    {
+        SaveNow();
+    }
+
+    private void QueueSave()
     {
         _saveTimer.Stop();
         if (!_dirty)
@@ -69,22 +100,68 @@ public sealed class SettingsService : IDisposable
             return;
         }
 
-        try
+        _dirty = false;
+        lock (_gate)
         {
-            _store.Save(Current);
-            _dirty = false;
-            LastSaveError = null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            LastSaveError = ex.Message;
-            Debug.WriteLine($"[KeyboardPet] 설정 저장 실패: {ex.Message}");
+            _pending = Current;   // 불변 레코드라 스냅샷을 다른 스레드에서 직렬화해도 안전하다
+            if (_saving)
+            {
+                return;           // 돌고 있는 루프가 _pending을 집어 간다
+            }
+
+            _saving = true;
+            _inFlight = Task.Run(SaveLoop);
         }
     }
 
-    public void Dispose()
+    private void SaveLoop()
     {
-        SaveNow();
+        try
+        {
+            while (true)
+            {
+                AppSettings snapshot;
+                lock (_gate)
+                {
+                    if (_pending is null)
+                    {
+                        return;   // 진입 판단과 같은 잠금 안에서 종료를 결정하므로 스냅샷이 남지 않는다(finally가 _saving을 내린다)
+                    }
+
+                    snapshot = _pending;
+                    _pending = null;
+                }
+
+                string? error = null;
+                try
+                {
+                    _store.Save(snapshot);
+                }
+                catch (Exception ex)
+                {
+                    // 어떤 예외든 루프를 죽이지 않는다. 실패한 저장은 다음 변경이나 종료 시 다시 시도한다.
+                    error = ex.Message;
+                    DiagnosticsLog.Write("설정 저장 실패", ex);
+                }
+
+                // 속성은 UI 스레드 소유. 종료 중이라 Dispatcher가 닫혔으면 조용히 버려진다.
+                _dispatcher.BeginInvoke(() =>
+                {
+                    LastSaveError = error;
+                    if (error is not null)
+                    {
+                        _dirty = true;
+                    }
+                });
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _saving = false;
+            }
+        }
     }
 
     private void ScheduleSave()

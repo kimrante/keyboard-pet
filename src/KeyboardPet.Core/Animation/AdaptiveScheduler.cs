@@ -22,6 +22,7 @@ public sealed class AdaptiveScheduler : IFrameScheduler
     private readonly Queue<long> _keystrokes = new();
     private long _lastKeystrokeMs;
     private bool _isIdle;
+    private bool _started;
 
     public AdaptiveScheduler(
         IFrameTimerFactory timers,
@@ -53,7 +54,8 @@ public sealed class AdaptiveScheduler : IFrameScheduler
         _timer.Tick += OnTick;
     }
 
-    public bool IsRunning => _timer.IsRunning;
+    /// <summary>Start 이후 Stop 전까지. 정지(idle) 상태에서는 타이머 자체는 멈춰 있어도 실행 중이다.</summary>
+    public bool IsRunning => _started;
 
     public bool IsIdle => _isIdle;
 
@@ -69,17 +71,23 @@ public sealed class AdaptiveScheduler : IFrameScheduler
         _lastKeystrokeMs = now - _idleReturnMs;
         // 복귀 시간이 설정되어 있으면 첫 키 입력 전까지는 정지 상태로 시작하고 복귀 프레임을 보여준다.
         _isIdle = _idleReturnMs > 0;
+        _started = true;
         _timer.Interval = TimeSpan.FromMilliseconds(_slowMs);
-        _timer.Start();
 
+        // 정지 상태로 시작하면 첫 키 입력까지 타이머를 돌리지 않는다(무입력 중 UI 스레드를 깨우지 않음).
         if (_isIdle)
         {
             _returnToIdle();
+        }
+        else
+        {
+            _timer.Start();
         }
     }
 
     public void Stop()
     {
+        _started = false;
         _timer.Stop();
         _keystrokes.Clear();
     }
@@ -130,6 +138,8 @@ public sealed class AdaptiveScheduler : IFrameScheduler
                 _returnToIdle();
             }
 
+            // 다음 키 입력(OnKeystroke)이 다시 시작할 때까지 타이머를 멈춘다.
+            _timer.Stop();
             return;
         }
 

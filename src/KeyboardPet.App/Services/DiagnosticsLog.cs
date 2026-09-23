@@ -11,7 +11,7 @@ namespace KeyboardPet.App.Services;
 public static class DiagnosticsLog
 {
     private static readonly object Sync = new();
-    private static bool _traceStarted;
+    private static StreamWriter? _trace;
 
     public static string Directory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KeyboardPet");
@@ -47,21 +47,38 @@ public static class DiagnosticsLog
     {
         try
         {
-            System.IO.Directory.CreateDirectory(Directory);
             lock (Sync)
             {
-                if (!_traceStarted)
+                // 호출마다 파일을 열고 닫지 않도록 첫 호출에 열어 둔다(다른 프로세스가 읽을 수 있게 공유 읽기 허용).
+                if (_trace is null)
                 {
-                    _traceStarted = true;
-                    File.WriteAllText(TracePath, BuildHeader());
+                    System.IO.Directory.CreateDirectory(Directory);
+                    _trace = OpenTrace();
+                    _trace.Write(BuildHeader());
+                    _trace.Flush();
                 }
 
-                File.AppendAllText(TracePath, $"[{DateTimeOffset.Now:HH:mm:ss.fff}] {step}{Environment.NewLine}");
+                _trace.WriteLine($"[{DateTimeOffset.Now:HH:mm:ss.fff}] {step}");
+                _trace.Flush();   // 줄마다 한 번만 실제 쓰기
             }
         }
         catch
         {
             // 무시
+        }
+    }
+
+    /// <summary>실행 중인 인스턴스가 startup.log를 쥐고 있으면(두 번째 실행) 프로세스별 파일에 남긴다.</summary>
+    private static StreamWriter OpenTrace()
+    {
+        try
+        {
+            return new StreamWriter(new FileStream(TracePath, FileMode.Create, FileAccess.Write, FileShare.Read));
+        }
+        catch (IOException)
+        {
+            var path = Path.Combine(Directory, "startup-2nd.log");   // 파일이 쌓이지 않도록 고정 이름
+            return new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read));
         }
     }
 

@@ -35,10 +35,11 @@ public sealed partial class FrameToggleViewModel : ObservableObject
     [ObservableProperty]
     private bool _isChecked;
 
-    public FrameToggleViewModel(int index, ImageSource? thumbnail, bool isChecked, Action<FrameToggleViewModel> changed)
+    public FrameToggleViewModel(int index, ImageSource? thumbnail, bool isMissing, bool isChecked, Action<FrameToggleViewModel> changed)
     {
         Index = index;
         Thumbnail = thumbnail;
+        IsMissing = isMissing;
         _isChecked = isChecked;
         _changed = changed;
     }
@@ -49,8 +50,8 @@ public sealed partial class FrameToggleViewModel : ObservableObject
 
     public ImageSource? Thumbnail { get; }
 
-    /// <summary>세트에 없는 프레임(프레임이 줄었거나 아직 로드 전). 선택은 유지된다.</summary>
-    public bool IsMissing => Thumbnail is null;
+    /// <summary>세트에 없는 프레임(프레임이 줄었거나 아직 로드 전). 선택은 유지된다. 썸네일은 준비 전엔 null일 수 있다.</summary>
+    public bool IsMissing { get; }
 
     partial void OnIsCheckedChanged(bool value) => _changed(this);
 }
@@ -63,7 +64,7 @@ public sealed partial class EffectItemViewModel : ObservableObject
 {
     private readonly ObservableCollection<EffectItemViewModel> _owner;
     private readonly Action _commit;
-    private readonly Func<IReadOnlyList<BitmapSource>>? _frames;
+    private readonly Func<(int Count, IReadOnlyList<BitmapSource>? Thumbnails)>? _frames;
     private readonly SortedSet<int> _selectedFrames;
     private bool _suspend;
 
@@ -85,12 +86,12 @@ public sealed partial class EffectItemViewModel : ObservableObject
 
     /// <param name="owner">이 카드가 들어 있는 목록. 삭제 시 여기서 빠진다</param>
     /// <param name="commit">편집이 있을 때마다 호출(소유자가 설정에 저장)</param>
-    /// <param name="frames">적용 프레임 선택용 세트 프레임. null이면 키 규칙 효과(적용 프레임 없음)</param>
+    /// <param name="frames">적용 프레임 선택용 (세트 프레임 수, 썸네일). null이면 키 규칙 효과(적용 프레임 없음)</param>
     public EffectItemViewModel(
         FrameEffect effect,
         ObservableCollection<EffectItemViewModel> owner,
         Action commit,
-        Func<IReadOnlyList<BitmapSource>>? frames = null)
+        Func<(int Count, IReadOnlyList<BitmapSource>? Thumbnails)>? frames = null)
     {
         _owner = owner;
         _commit = commit;
@@ -138,15 +139,16 @@ public sealed partial class EffectItemViewModel : ObservableObject
         _suspend = true;
         try
         {
-            var frames = _frames();
+            var (count, thumbnails) = _frames();
+            ImageSource? ThumbnailOf(int i) => thumbnails is not null && i < thumbnails.Count ? thumbnails[i] : null;
 
             // 세트의 프레임 하나씩 + 세트에 없는 선택(프레임이 줄었거나 아직 로드 전)은 자리표시 항목으로만 둔다(번호 크기와 무관).
-            var indices = Enumerable.Range(0, frames.Count).Concat(_selectedFrames.Where(i => i >= frames.Count)).ToList();
+            var indices = Enumerable.Range(0, count).Concat(_selectedFrames.Where(i => i >= count)).ToList();
 
-            // 프레임이 그대로면 다시 만들지 않는다(클릭 중인 체크박스가 교체되지 않도록).
+            // 프레임이 그대로면 다시 만들지 않는다(클릭 중인 체크박스가 교체되지 않도록). 썸네일 목록은 세트마다 한 번 만들어져 참조가 안정적이다.
             var unchanged = FrameToggles.Count == indices.Count
                             && FrameToggles.Select(t => t.Index).SequenceEqual(indices)
-                            && FrameToggles.All(t => ReferenceEquals(t.Thumbnail, t.Index < frames.Count ? frames[t.Index] : null));
+                            && FrameToggles.All(t => ReferenceEquals(t.Thumbnail, ThumbnailOf(t.Index)));
             if (unchanged)
             {
                 return;
@@ -155,7 +157,7 @@ public sealed partial class EffectItemViewModel : ObservableObject
             FrameToggles.Clear();
             foreach (var i in indices)
             {
-                FrameToggles.Add(new FrameToggleViewModel(i, i < frames.Count ? frames[i] : null, _selectedFrames.Contains(i), OnFrameToggled));
+                FrameToggles.Add(new FrameToggleViewModel(i, ThumbnailOf(i), isMissing: i >= count, _selectedFrames.Contains(i), OnFrameToggled));
             }
         }
         finally

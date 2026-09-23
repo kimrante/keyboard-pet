@@ -38,7 +38,9 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
 
     // GC가 델리게이트를 수거하지 않도록 필드로 보관한다. 콜백마다 새 델리게이트를 만들지 않도록 전파용도 미리 만든다.
     private readonly HookProc _hookProc;
-    private readonly Action<KeyEvent> _raise;
+
+    // DispatcherOperationCallback은 Dispatcher가 리플렉션(DynamicInvoke) 없이 직접 호출하는 델리게이트 형식이다.
+    private readonly DispatcherOperationCallback _raise;
     private IntPtr _hookHandle;
     private bool _systemEventsSubscribed;
 
@@ -46,7 +48,11 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     {
         _dispatcher = dispatcher;
         _hookProc = HookCallback;
-        _raise = keyEvent => KeyEvent?.Invoke(this, keyEvent);
+        _raise = state =>
+        {
+            KeyEvent?.Invoke(this, (KeyEvent)state!);
+            return null;
+        };
     }
 
     public event EventHandler<KeyEvent>? KeyEvent;
@@ -185,22 +191,16 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
             if (isDown is not null)
             {
                 var vk = Marshal.ReadInt32(lParam, VkCodeOffset);
-                bool isRepeat;
-                KeyModifiers modifiers;
-                if (isDown.Value)
+                if (!isDown.Value)
                 {
-                    var time = (uint)Marshal.ReadInt32(lParam, TimeOffset);
-                    isRepeat = _repeatDetector.OnKeyDown(vk, time);
-                    modifiers = ReadModifiers();
-                }
-                else
-                {
+                    // 키 업은 반복 감지에만 쓴다. 구독자가 모두 키 다운만 보므로 Dispatcher로 넘기지 않는다(전체 이벤트의 절반 절약).
                     _repeatDetector.OnKeyUp(vk);
-                    isRepeat = false;
-                    modifiers = KeyModifiers.None;
+                    return;
                 }
 
-                _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, isDown.Value, modifiers, isRepeat));
+                var time = (uint)Marshal.ReadInt32(lParam, TimeOffset);
+                var isRepeat = _repeatDetector.OnKeyDown(vk, time);
+                _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, true, ReadModifiers(), isRepeat));
             }
         }
     }

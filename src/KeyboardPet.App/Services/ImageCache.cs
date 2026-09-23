@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using KeyboardPet.Core.Animation;
 
@@ -10,7 +11,14 @@ namespace KeyboardPet.App.Services;
 public sealed record LoadedFrameSet(
     FrameSet Set,
     IReadOnlyList<BitmapSource> Frames,
-    IReadOnlyList<string>? MissingFiles = null);
+    IReadOnlyList<string>? MissingFiles = null)
+{
+    /// <summary>세트 순서의 썸네일(Frames와 같은 인덱스). ImageCache.TryGetThumbnails가 한 번 만든 뒤 재사용한다.</summary>
+    public IReadOnlyList<BitmapSource>? Thumbnails { get; set; }
+}
+
+/// <summary>디코딩 없이 폴더만 훑어 본 세트 상태(사용 중이 아닌 세트용).</summary>
+public sealed record FrameSetSummary(int FrameCount, int MissingCount, int LoopCount);
 
 /// <summary>
 /// 이미지 파일을 프레임 비트맵으로 디코딩한다. 모든 프레임은 Freeze되어 어느 스레드에서든 안전하게 공유된다.
@@ -23,6 +31,9 @@ public sealed record LoadedFrameSet(
 public sealed class ImageCache
 {
     public const int MaxFramesPerSet = 500;
+
+    /// <summary>설정 창 미리보기용 썸네일의 긴 변(픽셀). 전체 해상도 프레임을 20~48px 타일에 직접 바인딩하지 않기 위한 것.</summary>
+    public const int ThumbnailPixels = 64;
 
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -53,6 +64,28 @@ public sealed class ImageCache
             .Select(Path.GetFileName)
             .OrderBy(n => n, NaturalComparer)
             .ToList()!;
+    }
+
+    /// <summary>
+    /// 디코딩하지 않고 폴더와 설정만으로 프레임 수·없는 파일 수·루프 프레임 수를 센다(GIF는 파일당 1로 센다).
+    /// 사용 중이 아닌 세트는 화면에 그리지 않으므로 이렇게만 살펴 시작 시간과 메모리를 아낀다.
+    /// </summary>
+    public static FrameSetSummary Summarize(string folder, IReadOnlyList<string>? frames, IReadOnlyList<string>? animationFrames)
+    {
+        if (!Directory.Exists(folder))
+        {
+            throw new DirectoryNotFoundException($"이미지 세트 폴더를 찾을 수 없습니다: {folder}");
+        }
+
+        var present = ListFolderFiles(folder);
+        var presentSet = present.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = frames ?? present;
+        var existingAll = names.Where(presentSet.Contains).ToList();
+        var existing = existingAll.Take(MaxFramesPerSet).ToList();
+        var loop = animationFrames is null
+            ? -1
+            : existing.Count(n => animationFrames.Contains(n, StringComparer.OrdinalIgnoreCase));
+        return new FrameSetSummary(existing.Count, names.Count - existingAll.Count, loop);
     }
 
     /// <summary>새 로드 세대를 시작한다. 이후 EndGeneration까지 사용된 항목만 살아남는다.</summary>
@@ -147,6 +180,81 @@ public sealed class ImageCache
         return Build(name, uris, frames, Array.Empty<string>(), null, null);
     }
 
+    // ── 썸네일 ──
+
+    /// <summary>
+    /// 아직 썸네일이 없는 캐시 항목들의 썸네일을 백그라운드에서 만든다. 원본 프레임은 Freeze된 상태라 다른 스레드에서 읽어도 안전하고,
+    /// 결과도 Freeze한 뒤 넘긴다. 그 사이 EndGeneration으로 항목이 버려지면 결과가 그냥 쓰이지 않을 뿐이다.
+    /// </summary>
+    public Task BuildMissingThumbnailsAsync()
+    {
+        var pending = _entries.Values.Where(e => e.Thumbnails is null).ToList();
+        return pending.Count == 0
+            ? Task.CompletedTask
+            : Task.Run(() =>
+            {
+                foreach (var entry in pending)
+                {
+                    entry.Thumbnails = entry.Frames.Select(MakeThumbnail).ToList();
+                }
+            });
+    }
+
+    /// <summary>세트 순서의 썸네일. 아직 만들어지지 않은 파일이 있으면 null(BuildMissingThumbnailsAsync 완료 후 다시 요청).</summary>
+    public IReadOnlyList<BitmapSource>? TryGetThumbnails(LoadedFrameSet set)
+    {
+        if (set.Thumbnails is not null)
+        {
+            return set.Thumbnails;
+        }
+
+        var list = new List<BitmapSource>(set.Frames.Count);
+        foreach (var source in set.Set.SourceFiles ?? Array.Empty<string>())
+        {
+            if (!_entries.TryGetValue(source, out var entry) || entry.Thumbnails is not { } thumbnails)
+            {
+                return null;
+            }
+
+            list.AddRange(thumbnails);
+            if (list.Count >= set.Frames.Count)
+            {
+                break;
+            }
+        }
+
+        if (list.Count > set.Frames.Count)
+        {
+            list.RemoveRange(set.Frames.Count, list.Count - set.Frames.Count);
+        }
+
+        return set.Thumbnails = list;
+    }
+
+    /// <summary>파일이 캐시에 있는지(썸네일이 준비 중이거나 이미 있음).</summary>
+    public bool IsCached(string path) => _entries.ContainsKey(path);
+
+    /// <summary>파일 하나의 첫 프레임 썸네일(캐시에 있고 썸네일이 만들어진 경우). 없으면 null.</summary>
+    public BitmapSource? TryGetFileThumbnail(string path) =>
+        _entries.TryGetValue(path, out var entry) && entry.Thumbnails is { Count: > 0 } thumbnails ? thumbnails[0] : null;
+
+    /// <summary>
+    /// 긴 변이 <see cref="ThumbnailPixels"/>가 되도록 축소한 독립 비트맵. TransformedBitmap은 원본을 계속 참조하므로
+    /// WriteableBitmap으로 픽셀을 복사해(CPU 리샘플링) 원본과 분리한다. 이미 작은 프레임은 그대로 공유한다.
+    /// </summary>
+    public static BitmapSource MakeThumbnail(BitmapSource frame)
+    {
+        var scale = (double)ThumbnailPixels / Math.Max(frame.PixelWidth, frame.PixelHeight);
+        if (scale >= 1.0)
+        {
+            return frame;
+        }
+
+        var thumbnail = new WriteableBitmap(new TransformedBitmap(frame, new ScaleTransform(scale, scale)));
+        thumbnail.Freeze();
+        return thumbnail;
+    }
+
     private IReadOnlyList<BitmapSource> GetOrDecodeFile(string path)
     {
         var info = new FileInfo(path);
@@ -200,8 +308,9 @@ public sealed class ImageCache
         var decoder = BitmapDecoder.Create(uri, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         foreach (var frame in decoder.Frames)
         {
-            // BitmapFrame은 메타데이터 때문에 Freeze가 거부될 수 있으므로 순수 비트맵으로 복사한다.
-            BitmapSource bitmap = frame.CanFreeze ? frame : new WriteableBitmap(frame);
+            // BitmapFrame을 그대로 두면 디코더와 OnLoad로 읽어 둔 파일 원본 바이트까지 붙잡는다.
+            // 픽셀만 복사해 두면 프레임 하나당 디코딩된 표면만 남는다(메타데이터 때문에 Freeze가 거부되는 경우도 해결).
+            BitmapSource bitmap = new WriteableBitmap(frame);
             bitmap.Freeze();
             yield return bitmap;
         }
@@ -221,6 +330,9 @@ public sealed class ImageCache
         public (long Ticks, long Length) Stamp { get; }
 
         public int Generation { get; set; }
+
+        /// <summary>Frames와 같은 순서의 썸네일. 워커 스레드가 한 번 쓰고, UI 스레드는 null 여부만 본다.</summary>
+        public volatile IReadOnlyList<BitmapSource>? Thumbnails;
     }
 
     private sealed class NaturalStringComparer : IComparer<string?>

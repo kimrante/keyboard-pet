@@ -16,6 +16,7 @@ public static class ContextMenuFactory
         var menu = new ContextMenu();
         menu.Items.Add(CheckableItem("항상 위(_T)", shell.ToggleTopmostCommand, shell, nameof(ShellViewModel.IsTopmost)));
         menu.Items.Add(BuildModeMenu(shell));
+        menu.Items.Add(new MenuItem { Header = "펫 보이기(_P)", Command = shell.ShowPetCommand });
         menu.Items.Add(new MenuItem { Header = "설정(_S)...", Command = shell.OpenSettingsCommand });
         menu.Items.Add(new Separator());
         menu.Items.Add(new MenuItem { Header = "종료(_X)", Command = shell.ExitCommand });

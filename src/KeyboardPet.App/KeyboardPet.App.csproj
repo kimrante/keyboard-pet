@@ -11,7 +11,7 @@
     <AssemblyName>KeyboardPet</AssemblyName>
     <RootNamespace>KeyboardPet.App</RootNamespace>
 
-    <Version>1.7.0</Version>
+    <Version>1.7.1</Version>
     <Product>Keyboard Pet</Product>
     <AssemblyTitle>Keyboard Pet</AssemblyTitle>
     <Description>키보드 입력에 반응하는 데스크톱 펫 애니메이션</Description>
@@ -19,9 +19,20 @@
     <NeutralLanguage>ko-KR</NeutralLanguage>
 
     <!-- 배포 옵션은 scripts\publish.ps1 또는 Properties\PublishProfiles\win-x64-single.pubxml 참고 -->
-    <SatelliteResourceLanguages>ko;en</SatelliteResourceLanguages>
+    <SatelliteResourceLanguages>ko</SatelliteResourceLanguages>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+
+    <!-- 대부분 유휴 상태인 트레이 앱: 백그라운드 GC 스레드·PGO 계측·EventSource 초기화를 끈다(스레드 1개, 메모리 수 MB 절약) -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <EventSourceSupport>false</EventSourceSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 등록 16개짜리 컨테이너에 Reflection.Emit 동적 엔진은 이득이 없다(어셈블리 로드·IL 생성만 늘어남) -->
+    <RuntimeHostConfigurationOption Include="Microsoft.Extensions.DependencyInjection.DisableDynamicEngine" Value="true" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\KeyboardPet.Core\KeyboardPet.Core.csproj" />

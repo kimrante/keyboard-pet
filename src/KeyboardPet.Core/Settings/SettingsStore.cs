@@ -93,12 +93,15 @@ public sealed class SettingsStore
         var tempPath = FilePath + ".tmp";
         File.WriteAllText(tempPath, json);
 
+        // 기존 파일이 있으면 한 번의 원자적 교체로 백업까지 만든다(복사 + 이동보다 디스크 I/O가 적다).
         if (File.Exists(FilePath))
         {
-            File.Copy(FilePath, BackupPath, overwrite: true);
+            File.Replace(tempPath, FilePath, BackupPath);
         }
-
-        File.Move(tempPath, FilePath, overwrite: true);
+        else
+        {
+            File.Move(tempPath, FilePath, overwrite: true);
+        }
     }
 
     private void TryQuarantineCorruptFile()
