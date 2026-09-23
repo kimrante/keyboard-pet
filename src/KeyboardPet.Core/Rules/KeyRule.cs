@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using KeyboardPet.Core.Effects;
 
 namespace KeyboardPet.Core.Rules;
 
@@ -10,18 +11,23 @@ namespace KeyboardPet.Core.Rules;
 /// <param name="HoldMs">이 시간이 지나면 루프 애니메이션으로 복귀. 0이면 다음 규칙이 매칭될 때까지 유지</param>
 /// <param name="ResetIndex">애니메이션을 첫 프레임부터 다시 재생할지(FrameIndex가 null일 때 의미 있음)</param>
 /// <param name="FrameIndex">null이면 세트의 루프 애니메이션을 재생. 값이 있으면 그 프레임(0부터) 한 장만 정지 표시</param>
+/// <param name="Effects">키를 누른 순간부터 규칙이 유지되는 동안 재생할 움직임 효과(합성됨). null이면 없음</param>
 [method: JsonConstructor]
 public sealed record KeyRule(
     IReadOnlyList<string> Keys,
     int HoldMs = 0,
     bool ResetIndex = true,
-    int? FrameIndex = null)
+    int? FrameIndex = null,
+    IReadOnlyList<FrameEffect>? Effects = null)
 {
     /// <summary>키 하나짜리 규칙. 명명 인수(HoldMs:, ResetIndex:)를 기본 생성자와 같은 이름으로 쓸 수 있게 맞췄다.</summary>
-    public KeyRule(string Key, int HoldMs = 0, bool ResetIndex = true, int? FrameIndex = null)
-        : this(new[] { Key }, HoldMs, ResetIndex, FrameIndex)
+    public KeyRule(string Key, int HoldMs = 0, bool ResetIndex = true, int? FrameIndex = null, IReadOnlyList<FrameEffect>? Effects = null)
+        : this(new[] { Key }, HoldMs, ResetIndex, FrameIndex, Effects)
     {
     }
+
+    [JsonIgnore]
+    public bool HasEffects => Effects is { Count: > 0 };
 
     [JsonIgnore]
     public bool IsSingleFrame => FrameIndex is not null;

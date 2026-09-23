@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeyboardPet.App.Services;
 using KeyboardPet.Core.Abstractions;
 using KeyboardPet.Core.Animation;
+using KeyboardPet.Core.Effects;
 using KeyboardPet.Core.Rules;
 using KeyboardPet.Core.Settings;
 using Microsoft.Win32;
@@ -86,6 +87,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public ObservableCollection<string> AvailableSetNames { get; } = new();
 
     public ObservableCollection<RuleItemViewModel> Rules { get; } = new();
+
+    /// <summary>사용 중인 세트의 프레임 효과(효과 탭).</summary>
+    public ObservableCollection<EffectItemViewModel> Effects { get; } = new();
 
     public bool IsFixedMode
     {
@@ -197,6 +201,12 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     /// <summary>세트의 루프 프레임 인덱스. 전체가 루프면 null.</summary>
     public IReadOnlyList<int>? GetLoopFrames(string setName) => _animation.TryGetLoopFrames(setName);
+
+    /// <summary>효과는 사용 중인 세트의 프로필에 저장된다.</summary>
+    public void CommitEffects()
+    {
+        Push(s => s.WithEffectiveEffects(Effects.Select(e => e.ToEffect()).ToList()));
+    }
 
     /// <summary>규칙은 사용 중인 세트의 프로필에 저장된다.</summary>
     public void CommitRules()
@@ -348,6 +358,25 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             item.Folder = dialog.FolderName;
         }
     }
+
+    // ── 명령: 효과 ──
+
+    [RelayCommand]
+    private void AddEffect()
+    {
+        Effects.Add(CreateEffect(new FrameEffect(FrameEffectKind.BobVertical)));
+        CommitEffects();
+    }
+
+    private EffectItemViewModel CreateEffect(FrameEffect effect) =>
+        new(effect, showFrameSelection: true,
+            frames: () => GetFrames(DefaultFrameSet ?? string.Empty),
+            commit: CommitEffects,
+            remove: item =>
+            {
+                Effects.Remove(item);
+                CommitEffects();
+            });
 
     // ── 명령: 키 매핑 ──
 
@@ -504,6 +533,23 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             RefreshAvailableSetNames();
             DefaultFrameSet = s.DefaultFrameSet;
 
+            var currentEffects = Effects.Select(e => e.ToEffect()).ToList();
+            if (!FrameEffect.ListsEqual(currentEffects, s.EffectiveEffects))
+            {
+                Effects.Clear();
+                foreach (var effect in s.EffectiveEffects)
+                {
+                    Effects.Add(CreateEffect(effect));
+                }
+            }
+            else
+            {
+                foreach (var effect in Effects)
+                {
+                    effect.RefreshFrames();
+                }
+            }
+
             var currentRules = Rules.Select(r => r.ToRule()).ToList();
             var effectiveRules = s.EffectiveRules;
             if (!AppSettings.RulesEqual(currentRules, effectiveRules))
@@ -559,10 +605,15 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
         RuleErrorsText = string.Join(Environment.NewLine, _animation.RuleErrors);
 
-        // 세트가 다시 로드되면 규칙 행의 프레임 목록(썸네일)도 새 프레임으로 갱신한다.
+        // 세트가 다시 로드되면 규칙 행과 효과의 프레임 목록(썸네일)도 새 프레임으로 갱신한다.
         foreach (var rule in Rules)
         {
             rule.Revalidate();
+        }
+
+        foreach (var effect in Effects)
+        {
+            effect.RefreshFrames();
         }
 
         var builtIns = _animation.SetStatuses

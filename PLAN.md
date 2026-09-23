@@ -277,6 +277,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M10 ✅ 완료(2026-09-23) | 무입력 복귀 프레임 · 드래그앤드롭 가져오기 | 세트별 idleFrame(FrameSet.IdleFrameIndex, 엔진 ReturnToIdle, 스케줄러 시작 시 복귀), 세트 탭에 파일/폴더 드롭(폴더→세트, 파일→앱 폴더 복사 후 새 세트, 카드 위→해당 세트에 추가), publish.ps1 -All. 릴리스에는 항상 exe+포터블 zip | 0.5일 |
 | M11 ✅ 완료(2026-09-23) | 빈 세트 만들기 · 세트별 설정 프로필 | "새 세트" 버튼(앱 관리 폴더 생성, 카드 드롭으로 채움, 빈 세트는 안내 표시), AppSettings.SetProfiles(세트 이름 → AnimationOptions·Rules)와 EffectiveAnimation/EffectiveRules, 기본 세트 전환 시 프로필 적용·없으면 현재 설정 복사, 세트 이름 변경 시 프로필 이동, 탭 상단 편집 대상 안내 | 0.5일 |
 | M12 ✅ 완료(2026-09-23) | 설정의 이미지 세트 귀속 · 예시 세트 | 공통 Animation/Rules 제거(설정 v2, SettingsMigration으로 v1 자동 변환), 키 규칙에서 FrameSet 제거 → 사용 중인 세트의 프레임만 다룸(DisplayRequest), 세트 없는 프로필은 세트 기본값(예시 세트만 샘플 규칙), 세트 삭제 시 프로필 삭제, 애니메이션·키 매핑 탭 상단에 세트 선택. 내장 샘플은 jump 이미지만 남겨 '예시' 세트로 변경 | 0.5일 |
+| M13 ✅ 완료(2026-09-23) | 움직임 효과 | Core Effects(FrameEffect 8종·강도·속도·적용 프레임, EffectTransform 합성, EffectMixer 프레임별 시작 시각·규칙 활성화 재시작, EffectPadding), 세트 프로필 effects·규칙 effects, EffectService(CompositionTarget.Rendering, 효과 없으면 정지), 펫 창 여백·변형(저장 위치는 이미지 기준), 설정 창 효과 탭·규칙 효과, --screenshot/--data-dir 무인 실행과 CI 스크린샷 | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using KeyboardPet.Core.Effects;
 using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.App.ViewModels;
@@ -43,16 +45,45 @@ public sealed partial class RuleItemViewModel : ObservableObject
         _holdMs = rule.HoldMs;
         _resetIndex = rule.ResetIndex;
         RefreshFrameChoices(rule.FrameIndex);
+        foreach (var effect in rule.Effects ?? Array.Empty<FrameEffect>())
+        {
+            Effects.Add(CreateEffect(effect));
+        }
+
         Validate();
     }
 
     public SettingsViewModel Owner { get; }
 
+    /// <summary>키를 누른 순간부터 유지 시간 동안 재생할 효과(합성됨).</summary>
+    public ObservableCollection<EffectItemViewModel> Effects { get; } = new();
+
     public ObservableCollection<FrameChoice> FrameChoices { get; } = new();
 
     public int? FrameIndex => SelectedFrame?.Index;
 
-    public KeyRule ToRule() => new(ParseKeys(), Math.Max(0, HoldMs), ResetIndex, FrameIndex);
+    public KeyRule ToRule() => new(
+        ParseKeys(),
+        Math.Max(0, HoldMs),
+        ResetIndex,
+        FrameIndex,
+        Effects.Count == 0 ? null : Effects.Select(e => e.ToEffect()).ToList());
+
+    [RelayCommand]
+    private void AddEffect()
+    {
+        Effects.Add(CreateEffect(new FrameEffect(FrameEffectKind.Bounce, Strength: 60, PeriodMs: 500)));
+        Changed();
+    }
+
+    private EffectItemViewModel CreateEffect(FrameEffect effect) =>
+        new(effect, showFrameSelection: false, frames: () => Array.Empty<System.Windows.Media.Imaging.BitmapSource>(),
+            commit: Changed,
+            remove: item =>
+            {
+                Effects.Remove(item);
+                Changed();
+            });
 
     public void AppendKey(string spec)
     {

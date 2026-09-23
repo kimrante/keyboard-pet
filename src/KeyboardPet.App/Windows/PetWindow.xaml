@@ -28,12 +28,23 @@
           MouseLeftButtonDown="OnMouseLeftButtonDown">
         <StackPanel Margin="8">
             <!-- Width/Height를 원본 픽셀 × 배율로 고정해 이미지 파일의 DPI 메타데이터 영향을 받지 않게 한다. -->
+            <!-- Margin: 효과(흔들기·튀어오르기 등)가 움직일 투명 여백. 변형은 바닥 가운데를 기준으로 한다. -->
             <Image x:Name="FrameImage"
                    Source="{Binding CurrentFrame}"
                    Width="{Binding FrameWidth}"
                    Height="{Binding FrameHeight}"
+                   Margin="{Binding EffectMargin}"
                    Stretch="Fill"
-                   RenderOptions.BitmapScalingMode="HighQuality" />
+                   RenderTransformOrigin="0.5,1"
+                   RenderOptions.BitmapScalingMode="HighQuality">
+                <Image.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="EffectScale" />
+                        <RotateTransform x:Name="EffectRotate" />
+                        <TranslateTransform x:Name="EffectTranslate" />
+                    </TransformGroup>
+                </Image.RenderTransform>
+            </Image>
 
             <Border HorizontalAlignment="Center"
                     Margin="0,4,0,0"

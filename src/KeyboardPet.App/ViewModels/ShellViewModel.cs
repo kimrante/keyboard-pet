@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using KeyboardPet.App.Services;
 using KeyboardPet.App.Windows;
 using KeyboardPet.Core.Animation;
+using KeyboardPet.Core.Effects;
 using KeyboardPet.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,12 +31,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private int _keystrokeCount;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight))]
+    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight), nameof(EffectMargin))]
     private ImageSource? _currentFrame;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight))]
+    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight), nameof(EffectMargin))]
     private double _scale = 1.0;
+
+    /// <summary>효과가 이미지 밖으로 움직일 여백(이미지 긴 변에 대한 비율). EffectService가 설정한다.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EffectMargin))]
+    private EffectPadding _effectPadding = EffectPadding.None;
 
     [ObservableProperty]
     private double _opacity = 1.0;
@@ -65,6 +71,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public double FrameWidth => (CurrentFrame as BitmapSource)?.PixelWidth * Scale ?? 0;
 
     public double FrameHeight => (CurrentFrame as BitmapSource)?.PixelHeight * Scale ?? 0;
+
+    /// <summary>이미지 둘레의 투명 여백(DIP). 흔들리거나 튀어오르는 이미지가 창 밖으로 잘리지 않게 한다.</summary>
+    public Thickness EffectMargin
+    {
+        get
+        {
+            var size = Math.Max(FrameWidth, FrameHeight);
+            var p = EffectPadding;
+            return new Thickness(Math.Ceiling(p.Side * size), Math.Ceiling(p.Top * size), Math.Ceiling(p.Side * size), Math.Ceiling(p.Bottom * size));
+        }
+    }
 
     public bool IsFixedMode => FrameMode == FrameMode.Fixed;
 

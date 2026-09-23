@@ -26,8 +26,14 @@ public sealed class KeyRuleController : IDisposable
 
     public bool IsHolding => _holdTimer.IsRunning;
 
+    /// <summary>규칙이 활성화될 때마다(같은 규칙 재입력 포함) 1씩 늘어난다. 규칙 효과를 처음부터 재생하는 기준.</summary>
+    public long ActivationCount { get; private set; }
+
     /// <summary>보여줄 대상이 바뀌어야 할 때 발생.</summary>
     public event Action<DisplayRequest>? DisplayChanged;
+
+    /// <summary>규칙이 매칭되어 활성화될 때마다 발생(표시 대상이 그대로여도).</summary>
+    public event Action<KeyRule>? RuleActivated;
 
     /// <summary>키 다운(반복 제외) 이벤트를 넘긴다. 매칭된 규칙을 반환한다(없으면 null).</summary>
     public KeyRule? OnKeyDown(KeyEvent e)
@@ -58,6 +64,7 @@ public sealed class KeyRuleController : IDisposable
         _holdTimer.Tick -= OnHoldExpired;
         _holdTimer.Dispose();
         DisplayChanged = null;
+        RuleActivated = null;
     }
 
     private void Activate(KeyRule rule)
@@ -65,6 +72,7 @@ public sealed class KeyRuleController : IDisposable
         var targetChanged = ActiveFrameIndex != rule.FrameIndex;
         ActiveRule = rule;
         ActiveFrameIndex = rule.FrameIndex;
+        ActivationCount++;
 
         // 같은 대상이 유지되는 경우에도 ResetIndex=true면 애니메이션을 처음부터 다시 재생한다.
         if (targetChanged || rule.ResetIndex)
@@ -78,6 +86,8 @@ public sealed class KeyRuleController : IDisposable
             _holdTimer.Interval = TimeSpan.FromMilliseconds(rule.HoldMs);
             _holdTimer.Start();
         }
+
+        RuleActivated?.Invoke(rule);
     }
 
     private void OnHoldExpired()
