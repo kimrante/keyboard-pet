@@ -200,6 +200,17 @@ exe 크기를 줄인 압축 빌드(약 65MB). 대신 실행 중 메모리를 약
 결과물은 `artifacts\win-x64\` 아래에 생성됩니다. Visual Studio에서는 게시 프로필
 `Properties\PublishProfiles\win-x64-single.pubxml`을 사용할 수 있습니다.
 
+### GitHub 릴리스 (Actions)
+
+릴리스는 GitHub Actions의 **Release** 워크플로(`.github/workflows/release.yml`)로 만듭니다.
+
+1. `src/KeyboardPet.App/KeyboardPet.App.csproj`의 `<Version>`을 올리고, `docs/release-notes/v<버전>.md`에 릴리스 노트를 씁니다.
+2. `main`에 반영한 뒤 Actions 탭 → **Release** → **Run workflow**를 누릅니다.
+
+Windows 러너에서 테스트 → `publish.ps1 -All` → `v<버전>` 태그 생성 → 릴리스 게시까지 진행하고,
+단일 exe와 포터블 zip을 올린 뒤 노트 끝에 파일 크기·SHA-256 표를 붙입니다. 같은 버전의 릴리스가 이미 있거나
+릴리스 노트 파일이 없으면 빌드 전에 멈춥니다.
+
 ## 프로젝트 구조
 
 ```
