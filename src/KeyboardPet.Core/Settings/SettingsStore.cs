@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace KeyboardPet.Core.Settings;
@@ -16,6 +17,15 @@ public sealed class SettingsStore
         AllowTrailingCommas = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter() },
+    };
+
+    // 역직렬화(JsonOptions)와 같은 관대함으로 읽는다: 대소문자 무시, 주석·후행 쉼표 허용.
+    private static readonly JsonNodeOptions NodeOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
     };
 
     public SettingsStore(string filePath)
@@ -44,15 +54,18 @@ public sealed class SettingsStore
         try
         {
             var json = File.ReadAllText(FilePath);
-            var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-            if (loaded is null)
+            if (JsonNode.Parse(json, NodeOptions, DocumentOptions) is not JsonObject root)
             {
-                throw new JsonException("설정 파일이 비어 있습니다.");
+                throw new JsonException("설정 파일이 비어 있거나 객체가 아닙니다.");
             }
 
-            return Migrate(loaded).Normalized();
+            SettingsMigration.Migrate(root);
+            var loaded = root.Deserialize<AppSettings>(JsonOptions)
+                         ?? throw new JsonException("설정 파일이 비어 있습니다.");
+            return loaded.Normalized();
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException
+                                       or ArgumentException or InvalidOperationException)
         {
             LastLoadError = ex.Message;
             TryQuarantineCorruptFile();
@@ -78,14 +91,6 @@ public sealed class SettingsStore
         }
 
         File.Move(tempPath, FilePath, overwrite: true);
-    }
-
-    private static AppSettings Migrate(AppSettings loaded)
-    {
-        // 버전이 올라가면 여기서 단계별로 변환한다. v1이 최초 버전이므로 아직 변환 규칙은 없다.
-        return loaded.Version == AppSettings.CurrentVersion
-            ? loaded
-            : loaded with { Version = AppSettings.CurrentVersion };
     }
 
     private void TryQuarantineCorruptFile()

@@ -15,15 +15,15 @@ public class RuleMatcherTests
     {
         var matcher = new RuleMatcher(new[]
         {
-            new KeyRule("Ctrl+S", "save"),
-            new KeyRule("S", "letter"),
-            new KeyRule("*", "any"),
+            new KeyRule("Ctrl+S", FrameIndex: 0),
+            new KeyRule("S", FrameIndex: 1),
+            new KeyRule("*", FrameIndex: 2),
         });
 
-        Assert.Equal("save", matcher.Match(Down(VkS, KeyModifiers.Control))?.FrameSet);
-        Assert.Equal("letter", matcher.Match(Down(VkS))?.FrameSet);
-        Assert.Equal("letter", matcher.Match(Down(VkS, KeyModifiers.Shift))?.FrameSet);
-        Assert.Equal("any", matcher.Match(Down(VkEnter))?.FrameSet);
+        Assert.Equal(0, matcher.Match(Down(VkS, KeyModifiers.Control))?.FrameIndex);
+        Assert.Equal(1, matcher.Match(Down(VkS))?.FrameIndex);
+        Assert.Equal(1, matcher.Match(Down(VkS, KeyModifiers.Shift))?.FrameIndex);
+        Assert.Equal(2, matcher.Match(Down(VkEnter))?.FrameIndex);
     }
 
     [Fact]
@@ -31,17 +31,17 @@ public class RuleMatcherTests
     {
         var matcher = new RuleMatcher(new[]
         {
-            new KeyRule("S", "letter"),
-            new KeyRule("Ctrl+S", "save"),
+            new KeyRule("S", FrameIndex: 1),
+            new KeyRule("Ctrl+S", FrameIndex: 0),
         });
 
-        Assert.Equal("letter", matcher.Match(Down(VkS, KeyModifiers.Control))?.FrameSet);
+        Assert.Equal(1, matcher.Match(Down(VkS, KeyModifiers.Control))?.FrameIndex);
     }
 
     [Fact]
     public void NoMatch_ReturnsNull()
     {
-        var matcher = new RuleMatcher(new[] { new KeyRule("Enter", "jump") });
+        var matcher = new RuleMatcher(new[] { new KeyRule("Enter", FrameIndex: 0) });
 
         Assert.Null(matcher.Match(Down(VkS)));
     }
@@ -51,7 +51,7 @@ public class RuleMatcherTests
     {
         var matcher = new RuleMatcher(new[]
         {
-            new KeyRule(new[] { "A", "S", "D", "F" }, "left"),
+            new KeyRule(new[] { "A", "S", "D", "F" }, FrameIndex: 0),
         });
 
         Assert.NotNull(matcher.Match(Down(0x41)));
@@ -64,15 +64,15 @@ public class RuleMatcherTests
     {
         var matcher = new RuleMatcher(new[]
         {
-            new KeyRule(new[] { "Bogus", "Enter" }, "partial"),
-            new KeyRule("AlsoBogus", "dropped"),
+            new KeyRule(new[] { "Bogus", "Enter" }, FrameIndex: 5),
+            new KeyRule("AlsoBogus", FrameIndex: 6),
         });
 
         Assert.Single(matcher.Rules);
-        Assert.Equal("partial", matcher.Match(Down(VkEnter))?.FrameSet);
+        Assert.Equal(5, matcher.Match(Down(VkEnter))?.FrameIndex);
         Assert.Equal(2, matcher.Errors.Count);
         Assert.Contains(matcher.Errors, e => e.Contains("Bogus"));
-        Assert.Contains(matcher.Errors, e => e.Contains("dropped"));
+        Assert.Contains(matcher.Errors, e => e.Contains("AlsoBogus"));
     }
 
     [Fact]
