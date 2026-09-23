@@ -21,6 +21,7 @@ public partial class PetWindow : Window
     private readonly SettingsService _settings;
     private readonly EffectService _effects;
     private Thickness _effectMargin;
+    private (double Width, double Height) _frameSize;
 
     /// <summary>
     /// true인 동안은 크기가 바뀔 때마다 작업 영역 우하단에 자동 정렬한다.
@@ -112,13 +113,20 @@ public partial class PetWindow : Window
         }
         else if (e.PropertyName is nameof(ShellViewModel.FrameWidth) or nameof(ShellViewModel.FrameHeight))
         {
-            ApplyEffect(_effects.Current);
+            // 이동량은 이미지 크기에 비례하므로 크기가 실제로 바뀐 프레임에서만 다시 적용한다(프레임마다 두 번 통지됨).
+            var size = (_shell.FrameWidth, _shell.FrameHeight);
+            if (size != _frameSize)
+            {
+                _frameSize = size;
+                ApplyEffect(_effects.Current);
+            }
         }
     }
 
     /// <summary>효과 변형을 이미지에 적용한다. 이동은 이미지 크기에 대한 비율이므로 표시 크기를 곱한다.</summary>
     private void ApplyEffect(EffectTransform t)
     {
+        _frameSize = (_shell.FrameWidth, _shell.FrameHeight);
         EffectScale.ScaleX = t.ScaleX;
         EffectScale.ScaleY = t.ScaleY;
         EffectRotate.Angle = t.Angle;

@@ -36,42 +36,9 @@ public readonly record struct EffectPadding(double Side, double Top, double Bott
 {
     public static EffectPadding None { get; } = new(0, 0, 0);
 
-    /// <summary>
-    /// 효과 목록이 동시에 최대로 움직일 때의 여백. 효과는 합성되므로(같은 종류도) 강도를 모두 더해 넉넉하게 잡는다.
-    /// </summary>
-    public static EffectPadding For(IEnumerable<FrameEffect> effects)
-    {
-        double side = 0, top = 0, bottom = 0;
-        foreach (var group in effects.GroupBy(e => e.Kind))
-        {
-            var s = group.Sum(e => Math.Clamp(e.Strength, FrameEffect.MinStrength, FrameEffect.MaxStrength)) / 100.0;
-            switch (group.Key)
-            {
-                case FrameEffectKind.BobVertical:
-                    top += FrameEffect.Coefficients.Bob * s;
-                    bottom += FrameEffect.Coefficients.Bob * s;
-                    break;
-                case FrameEffectKind.ShakeHorizontal:
-                    side += FrameEffect.Coefficients.Shake * s;
-                    break;
-                case FrameEffectKind.Grow:
-                    top += FrameEffect.Coefficients.Grow * s;
-                    side += FrameEffect.Coefficients.Grow * s / 2;
-                    break;
-                case FrameEffectKind.Bounce:
-                    top += FrameEffect.Coefficients.Bounce * s;
-                    break;
-                case FrameEffectKind.Tilt:
-                    // 바닥 가운데를 축으로 기울면 위쪽 모서리가 옆으로 크게 움직인다(정사각형 기준 약 0.4).
-                    side += Math.Sin(FrameEffect.Coefficients.TiltDegrees * s * Math.PI / 180) * 1.05;
-                    break;
-                case FrameEffectKind.Squash:
-                    side += FrameEffect.Coefficients.Squash * s / 2;
-                    top += FrameEffect.Coefficients.Squash * s;
-                    break;
-            }
-        }
+    /// <summary>효과 목록이 동시에 최대로 움직일 때의 여백. 효과는 합성되므로 각 효과의 범위를 모두 더해 넉넉하게 잡는다.</summary>
+    public static EffectPadding For(IEnumerable<FrameEffect> effects) =>
+        effects.Aggregate(None, (sum, e) => sum + e.MaxExtent());
 
-        return new EffectPadding(side, top, bottom);
-    }
+    public static EffectPadding operator +(EffectPadding a, EffectPadding b) => new(a.Side + b.Side, a.Top + b.Top, a.Bottom + b.Bottom);
 }

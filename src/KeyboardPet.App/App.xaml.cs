@@ -142,8 +142,8 @@ public partial class App : Application
 
         if (ScreenshotDirectory is { } screenshotDir)
         {
-            // 첫 렌더링이 끝난 뒤 시작한다. 실패하면 로그를 남기고 종료 코드 1로 끝낸다.
-            _services.GetRequiredService<EffectService>().ManualTimeMs = 0;
+            // 효과 시계를 0에 고정해 두고, 첫 렌더링이 끝난 뒤 시작한다. 실패하면 로그를 남기고 종료 코드 1로 끝낸다.
+            _services.GetRequiredService<EffectClock>().Override = 0;
             Dispatcher.InvokeAsync(async () =>
             {
                 try
@@ -231,6 +231,7 @@ public partial class App : Application
         // Animation
         services.AddSingleton<ImageCache>();
         services.AddSingleton<AnimationService>();
+        services.AddSingleton<EffectClock>();
         services.AddSingleton<EffectService>();
 
         // ViewModels

@@ -88,7 +88,7 @@ public sealed class EffectSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Controller_CountsActivations_AndRaisesRuleActivated()
+    public void Controller_RaisesRuleActivated_OnEveryActivation()
     {
         var rule = new KeyRule("Enter", HoldMs: 0, ResetIndex: false, Effects: new[] { new FrameEffect(FrameEffectKind.Bounce) });
         var controller = new KeyRuleController(new FakeTimerFactory(), new RuleMatcher(new[] { rule }));
@@ -98,7 +98,6 @@ public sealed class EffectSettingsTests : IDisposable
         controller.OnKeyDown(new KeyEvent(0x0D, true, KeyModifiers.None, false));
         controller.OnKeyDown(new KeyEvent(0x0D, true, KeyModifiers.None, false));
 
-        Assert.Equal(2, controller.ActivationCount);
         Assert.Equal(2, activated.Count);   // 표시 대상이 그대로여도(재입력) 효과는 다시 시작해야 한다
         Assert.True(controller.ActiveRule!.HasEffects);
     }

@@ -52,10 +52,11 @@ public sealed record FrameEffect(
     public const int MaxPeriodMs = 5000;
     public const int DefaultPeriodMs = 800;
 
-    [JsonIgnore]
-    public bool AppliesToAllFrames => Frames is null;
-
     public bool AppliesTo(int frameIndex) => Frames is null || Frames.Contains(frameIndex);
+
+    /// <summary>강도가 0이면 움직이지 않으므로 계산할 필요가 없다.</summary>
+    [JsonIgnore]
+    public bool IsVisible => Strength > MinStrength;
 
     /// <summary>범위 밖 값과 중복·음수 프레임 번호를 보정한 복사본.</summary>
     public FrameEffect Normalized() => this with
@@ -72,25 +73,55 @@ public sealed record FrameEffect(
         var s = Math.Clamp(Strength, MinStrength, MaxStrength) / 100.0;
         var period = Math.Clamp(PeriodMs, MinPeriodMs, MaxPeriodMs);
         var phase = Math.Max(0, elapsedMs) / period;
-        var wave = Math.Sin(2 * Math.PI * phase);                  // -1..1, 0에서 시작
-        var pulse = 0.5 - 0.5 * Math.Cos(2 * Math.PI * phase);     // 0..1..0, 0에서 시작
+
+        // 종류마다 하나만 쓰므로 필요한 것만 계산한다(매 프레임 호출).
+        double Wave() => Math.Sin(2 * Math.PI * phase);               // -1..1, 0에서 시작
+        double Pulse() => 0.5 - 0.5 * Math.Cos(2 * Math.PI * phase);  // 0..1..0, 0에서 시작
 
         return Kind switch
         {
-            FrameEffectKind.BobVertical => EffectTransform.Identity with { OffsetY = -Coefficients.Bob * s * wave },
-            FrameEffectKind.ShakeHorizontal => EffectTransform.Identity with { OffsetX = Coefficients.Shake * s * wave },
-            FrameEffectKind.Shrink => Uniform(1 - Coefficients.Shrink * s * pulse),
-            FrameEffectKind.Grow => Uniform(1 + Coefficients.Grow * s * pulse),
+            FrameEffectKind.BobVertical => EffectTransform.Identity with { OffsetY = -Coefficients.Bob * s * Wave() },
+            FrameEffectKind.ShakeHorizontal => EffectTransform.Identity with { OffsetX = Coefficients.Shake * s * Wave() },
+            FrameEffectKind.Shrink => Uniform(1 - Coefficients.Shrink * s * Pulse()),
+            FrameEffectKind.Grow => Uniform(1 + Coefficients.Grow * s * Pulse()),
             FrameEffectKind.Bounce => EffectTransform.Identity with { OffsetY = -Coefficients.Bounce * s * Hop(phase) },
-            FrameEffectKind.Tilt => EffectTransform.Identity with { Angle = Coefficients.TiltDegrees * s * wave },
-            FrameEffectKind.Squash => EffectTransform.Identity with
-            {
-                ScaleX = 1 + Coefficients.Squash * s * wave,
-                ScaleY = 1 - Coefficients.Squash * s * wave,
-            },
-            FrameEffectKind.Blink => EffectTransform.Identity with { Opacity = 1 - Coefficients.Blink * s * pulse },
+            FrameEffectKind.Tilt => EffectTransform.Identity with { Angle = Coefficients.TiltDegrees * s * Wave() },
+            FrameEffectKind.Squash => Squash(Coefficients.Squash * s * Wave()),
+            FrameEffectKind.Blink => EffectTransform.Identity with { Opacity = 1 - Coefficients.Blink * s * Pulse() },
             _ => EffectTransform.Identity,
         };
+    }
+
+    /// <summary>
+    /// 이 효과가 이미지 밖으로 나갈 수 있는 최대 범위(이미지 긴 변에 대한 비율). <see cref="Evaluate"/>와 같은 계수로 계산한다.
+    /// 배율·기울기는 바닥 가운데 기준이므로 위쪽과 옆으로만 번진다.
+    /// </summary>
+    public EffectPadding MaxExtent()
+    {
+        var s = Math.Clamp(Strength, MinStrength, MaxStrength) / 100.0;
+        return Kind switch
+        {
+            FrameEffectKind.BobVertical => new EffectPadding(0, Coefficients.Bob * s, Coefficients.Bob * s),
+            FrameEffectKind.ShakeHorizontal => new EffectPadding(Coefficients.Shake * s, 0, 0),
+            FrameEffectKind.Grow => new EffectPadding(Coefficients.Grow * s / 2, Coefficients.Grow * s, 0),
+            FrameEffectKind.Bounce => new EffectPadding(0, Coefficients.Bounce * s, 0),
+            FrameEffectKind.Tilt => TiltExtent(Coefficients.TiltDegrees * s),
+            FrameEffectKind.Squash => new EffectPadding(Coefficients.Squash * s / 2, Coefficients.Squash * s, 0),
+            _ => EffectPadding.None,   // Shrink, Blink: 이미지 안에서만 변한다
+        };
+    }
+
+    /// <summary>
+    /// 바닥 가운데를 축으로 <paramref name="degrees"/>만큼 기울인 정사각형의 위쪽 모서리가 옆·위로 얼마나 나가는지.
+    /// 위쪽 모서리 (±½, −1)은 x = ½cosθ + sinθ, y = −(½sinθ + cosθ)로, 아래쪽 모서리 (±½, 0)은 y = ½sinθ로 움직인다.
+    /// </summary>
+    private static EffectPadding TiltExtent(double degrees)
+    {
+        var (sin, cos) = Math.SinCos(degrees * Math.PI / 180);
+        return new EffectPadding(
+            Math.Max(0, 0.5 * cos + sin - 0.5),
+            Math.Max(0, 0.5 * sin + cos - 1),
+            0.5 * sin);
     }
 
     /// <summary>효과 목록을 값으로 비교한다(Frames 목록 포함).</summary>
@@ -118,6 +149,8 @@ public sealed record FrameEffect(
     }
 
     private static EffectTransform Uniform(double scale) => EffectTransform.Identity with { ScaleX = scale, ScaleY = scale };
+
+    private static EffectTransform Squash(double amount) => EffectTransform.Identity with { ScaleX = 1 + amount, ScaleY = 1 - amount };
 
     /// <summary>강도 100%일 때의 최대 변화량. 이동은 이미지 크기에 대한 비율, 기울기는 도(°).</summary>
     public static class Coefficients

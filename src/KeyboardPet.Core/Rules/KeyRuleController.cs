@@ -26,9 +26,6 @@ public sealed class KeyRuleController : IDisposable
 
     public bool IsHolding => _holdTimer.IsRunning;
 
-    /// <summary>규칙이 활성화될 때마다(같은 규칙 재입력 포함) 1씩 늘어난다. 규칙 효과를 처음부터 재생하는 기준.</summary>
-    public long ActivationCount { get; private set; }
-
     /// <summary>보여줄 대상이 바뀌어야 할 때 발생.</summary>
     public event Action<DisplayRequest>? DisplayChanged;
 
@@ -72,7 +69,6 @@ public sealed class KeyRuleController : IDisposable
         var targetChanged = ActiveFrameIndex != rule.FrameIndex;
         ActiveRule = rule;
         ActiveFrameIndex = rule.FrameIndex;
-        ActivationCount++;
 
         // 같은 대상이 유지되는 경우에도 ResetIndex=true면 애니메이션을 처음부터 다시 재생한다.
         if (targetChanged || rule.ResetIndex)

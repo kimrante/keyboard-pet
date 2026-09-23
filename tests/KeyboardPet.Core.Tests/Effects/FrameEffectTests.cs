@@ -118,6 +118,50 @@ public class FrameEffectTests
         Assert.False(FrameEffect.ListsEqual(a, null));
     }
 
+    [Theory]
+    [InlineData(FrameEffectKind.BobVertical)]
+    [InlineData(FrameEffectKind.ShakeHorizontal)]
+    [InlineData(FrameEffectKind.Shrink)]
+    [InlineData(FrameEffectKind.Grow)]
+    [InlineData(FrameEffectKind.Bounce)]
+    [InlineData(FrameEffectKind.Tilt)]
+    [InlineData(FrameEffectKind.Squash)]
+    [InlineData(FrameEffectKind.Blink)]
+    public void MaxExtent_CoversEverySampledPosition(FrameEffectKind kind)
+    {
+        // 정사각형 이미지 기준으로 한 주기를 촘촘히 돌며, 실제 움직임이 여백 안에 들어오는지 본다.
+        var effect = new FrameEffect(kind, 100, 1000);
+        var extent = effect.MaxExtent();
+        for (var ms = 0; ms <= 1000; ms += 10)
+        {
+            var t = effect.Evaluate(ms);
+            var (left, top, right, bottom) = TransformedBounds(t);
+            Assert.True(-left <= extent.Side + 1e-9, $"{kind} @{ms}: left {-left} > {extent.Side}");
+            Assert.True(right - 1 <= extent.Side + 1e-9, $"{kind} @{ms}: right {right - 1} > {extent.Side}");
+            Assert.True(-top <= extent.Top + 1e-9, $"{kind} @{ms}: top {-top} > {extent.Top}");
+            Assert.True(bottom - 1 <= extent.Bottom + 1e-9, $"{kind} @{ms}: bottom {bottom - 1} > {extent.Bottom}");
+        }
+    }
+
+    /// <summary>단위 정사각형(0,0)-(1,1)을 바닥 가운데(0.5,1) 기준으로 변형했을 때의 외접 사각형.</summary>
+    private static (double Left, double Top, double Right, double Bottom) TransformedBounds(EffectTransform t)
+    {
+        var rad = t.Angle * Math.PI / 180;
+        var (cos, sin) = (Math.Cos(rad), Math.Sin(rad));
+        double left = double.MaxValue, top = double.MaxValue, right = double.MinValue, bottom = double.MinValue;
+        foreach (var (x, y) in new[] { (0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0) })
+        {
+            var dx = (x - 0.5) * t.ScaleX;
+            var dy = (y - 1) * t.ScaleY;
+            var px = 0.5 + dx * cos - dy * sin + t.OffsetX;
+            var py = 1 + dx * sin + dy * cos + t.OffsetY;
+            left = Math.Min(left, px); right = Math.Max(right, px);
+            top = Math.Min(top, py); bottom = Math.Max(bottom, py);
+        }
+
+        return (left, top, right, bottom);
+    }
+
     [Fact]
     public void Padding_GrowsWithStrength_AndAddsAcrossKinds()
     {
@@ -130,7 +174,8 @@ public class FrameEffectTests
 
         var combined = EffectPadding.For(new[] { new FrameEffect(FrameEffectKind.Bounce, 100), new FrameEffect(FrameEffectKind.BobVertical, 100) });
         Assert.Equal(FrameEffect.Coefficients.Bounce + FrameEffect.Coefficients.Bob, combined.Top, 6);
-        Assert.True(EffectPadding.For(new[] { new FrameEffect(FrameEffectKind.Tilt, 100) }).Side > 0.4);
+        var tilt = EffectPadding.For(new[] { new FrameEffect(FrameEffectKind.Tilt, 100) });
+        Assert.True(tilt.Side > 0.3 && tilt.Top > 0 && tilt.Bottom > 0);   // 기울면 옆·위·아래로 모두 조금씩 나간다
     }
 
     private static void AssertIdentity(EffectTransform t)

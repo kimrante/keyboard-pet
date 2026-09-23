@@ -369,14 +369,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     private EffectItemViewModel CreateEffect(FrameEffect effect) =>
-        new(effect, showFrameSelection: true,
-            frames: () => GetFrames(DefaultFrameSet ?? string.Empty),
-            commit: CommitEffects,
-            remove: item =>
-            {
-                Effects.Remove(item);
-                CommitEffects();
-            });
+        new(effect, Effects, CommitEffects, frames: () => GetFrames(DefaultFrameSet ?? string.Empty));
 
     // ── 명령: 키 매핑 ──
 

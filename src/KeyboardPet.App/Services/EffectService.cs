@@ -7,24 +7,36 @@ using KeyboardPet.Core.Settings;
 
 namespace KeyboardPet.App.Services;
 
+/// <summary>효과 계산에 쓰는 시계(ms). 스크린샷 모드는 <see cref="Override"/>로 특정 순간을 고정한다.</summary>
+public sealed class EffectClock
+{
+    private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+
+    /// <summary>값이 있으면 실제 시계 대신 이 시각(ms)을 쓴다.</summary>
+    public double? Override { get; set; }
+
+    public double NowMs => Override ?? _stopwatch.Elapsed.TotalMilliseconds;
+}
+
 /// <summary>
 /// 사용 중인 세트의 프레임 효과와 활성 키 규칙의 효과를 합성해 펫 이미지 변형(<see cref="TransformChanged"/>)을 낸다.
-/// 움직일 효과가 있을 때만 화면 갱신(CompositionTarget.Rendering)에 붙어 돌고, 없으면 멈춰서 CPU를 쓰지 않는다.
+/// 지금 프레임에서 움직일 효과가 있을 때만 화면 갱신(CompositionTarget.Rendering)에 붙어 돌고, 없으면 멈춰서 CPU를 쓰지 않는다.
 /// </summary>
 public sealed class EffectService : IDisposable
 {
     private readonly AnimationService _animation;
     private readonly SettingsService _settings;
     private readonly ShellViewModel _shell;
+    private readonly EffectClock _clock;
     private readonly EffectMixer _mixer = new();
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
     private bool _running;
 
-    public EffectService(AnimationService animation, SettingsService settings, ShellViewModel shell)
+    public EffectService(AnimationService animation, SettingsService settings, ShellViewModel shell, EffectClock clock)
     {
         _animation = animation;
         _settings = settings;
         _shell = shell;
+        _clock = clock;
     }
 
     /// <summary>새 변형. 항상 UI 스레드에서 발생한다.</summary>
@@ -32,25 +44,23 @@ public sealed class EffectService : IDisposable
 
     public EffectTransform Current { get; private set; } = EffectTransform.Identity;
 
-    /// <summary>값이 있으면 실제 시계 대신 이 시각(ms)으로 계산한다. 스크린샷 모드에서 특정 순간을 찍을 때 쓴다.</summary>
-    public double? ManualTimeMs { get; set; }
-
     public void Initialize()
     {
         Configure(_settings.Current);
         _settings.Changed += OnSettingsChanged;
         _animation.RuleActivated += OnRuleActivated;
+        _animation.FrameChanged += OnFrameChanged;
         EnsureRunning();
     }
 
     /// <summary>지금 시각으로 한 번 계산해 반영한다.</summary>
     public void Tick()
     {
-        var now = ManualTimeMs ?? _clock.Elapsed.TotalMilliseconds;
+        var frame = _animation.CurrentFrameIndex;
         var ruleEffects = _animation.ActiveRule?.Effects;
-        Publish(_mixer.Sample(now, _animation.CurrentFrameIndex, ruleEffects, _animation.RuleActivationSerial));
+        Publish(_mixer.Sample(_clock.NowMs, frame, ruleEffects));
 
-        if (_mixer.IsIdle(ruleEffects))
+        if (_mixer.IsIdle(frame, ruleEffects))
         {
             Stop();
         }
@@ -61,6 +71,7 @@ public sealed class EffectService : IDisposable
         Stop();
         _settings.Changed -= OnSettingsChanged;
         _animation.RuleActivated -= OnRuleActivated;
+        _animation.FrameChanged -= OnFrameChanged;
     }
 
     private void OnSettingsChanged(AppSettings old, AppSettings @new)
@@ -75,11 +86,11 @@ public sealed class EffectService : IDisposable
 
     private void OnRuleActivated(KeyRule rule)
     {
-        if (rule.HasEffects)
-        {
-            EnsureRunning();
-        }
+        _mixer.RestartRule();
+        EnsureRunning();
     }
+
+    private void OnFrameChanged(int frameIndex) => EnsureRunning();
 
     private void Configure(AppSettings s)
     {
@@ -92,7 +103,7 @@ public sealed class EffectService : IDisposable
 
     private void EnsureRunning()
     {
-        if (_running || _mixer.IsIdle(_animation.ActiveRule?.Effects))
+        if (_running || _mixer.IsIdle(_animation.CurrentFrameIndex, _animation.ActiveRule?.Effects))
         {
             return;
         }

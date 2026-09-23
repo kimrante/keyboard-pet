@@ -61,9 +61,9 @@ public sealed partial class FrameToggleViewModel : ObservableObject
 /// </summary>
 public sealed partial class EffectItemViewModel : ObservableObject
 {
+    private readonly ObservableCollection<EffectItemViewModel> _owner;
     private readonly Action _commit;
-    private readonly Action<EffectItemViewModel> _remove;
-    private readonly Func<IReadOnlyList<BitmapSource>> _frames;
+    private readonly Func<IReadOnlyList<BitmapSource>>? _frames;
     private readonly SortedSet<int> _selectedFrames;
     private bool _suspend;
 
@@ -83,18 +83,18 @@ public sealed partial class EffectItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FramesSummary))]
     private bool _allFrames;
 
-    /// <param name="showFrameSelection">세트 효과면 true(적용 프레임 선택), 키 규칙 효과면 false</param>
+    /// <param name="owner">이 카드가 들어 있는 목록. 삭제 시 여기서 빠진다</param>
+    /// <param name="commit">편집이 있을 때마다 호출(소유자가 설정에 저장)</param>
+    /// <param name="frames">적용 프레임 선택용 세트 프레임. null이면 키 규칙 효과(적용 프레임 없음)</param>
     public EffectItemViewModel(
         FrameEffect effect,
-        bool showFrameSelection,
-        Func<IReadOnlyList<BitmapSource>> frames,
+        ObservableCollection<EffectItemViewModel> owner,
         Action commit,
-        Action<EffectItemViewModel> remove)
+        Func<IReadOnlyList<BitmapSource>>? frames = null)
     {
+        _owner = owner;
         _commit = commit;
-        _remove = remove;
         _frames = frames;
-        ShowFrameSelection = showFrameSelection;
 
         _selectedKind = EffectKindChoice.Of(effect.Kind);
         _strength = effect.Strength;
@@ -106,7 +106,8 @@ public sealed partial class EffectItemViewModel : ObservableObject
 
     public IReadOnlyList<EffectKindChoice> KindChoices => EffectKindChoice.All;
 
-    public bool ShowFrameSelection { get; }
+    /// <summary>세트 효과(적용 프레임 선택 있음)인지, 키 규칙 효과인지.</summary>
+    public bool ShowFrameSelection => _frames is not null;
 
     public ObservableCollection<FrameToggleViewModel> FrameToggles { get; } = new();
 
@@ -129,7 +130,7 @@ public sealed partial class EffectItemViewModel : ObservableObject
     /// <summary>세트 프레임이 다시 로드되면 썸네일 목록을 새로 만든다. 선택은 프레임 번호로 유지된다.</summary>
     public void RefreshFrames()
     {
-        if (!ShowFrameSelection)
+        if (_frames is null)
         {
             return;
         }
@@ -163,7 +164,11 @@ public sealed partial class EffectItemViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Remove() => _remove(this);
+    private void Remove()
+    {
+        _owner.Remove(this);
+        _commit();
+    }
 
     partial void OnSelectedKindChanged(EffectKindChoice value) => Changed();
 

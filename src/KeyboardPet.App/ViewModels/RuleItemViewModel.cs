@@ -47,7 +47,7 @@ public sealed partial class RuleItemViewModel : ObservableObject
         RefreshFrameChoices(rule.FrameIndex);
         foreach (var effect in rule.Effects ?? Array.Empty<FrameEffect>())
         {
-            Effects.Add(CreateEffect(effect));
+            Effects.Add(new EffectItemViewModel(effect, Effects, Changed));
         }
 
         Validate();
@@ -72,18 +72,9 @@ public sealed partial class RuleItemViewModel : ObservableObject
     [RelayCommand]
     private void AddEffect()
     {
-        Effects.Add(CreateEffect(new FrameEffect(FrameEffectKind.Bounce, Strength: 60, PeriodMs: 500)));
+        Effects.Add(new EffectItemViewModel(new FrameEffect(FrameEffectKind.Bounce, Strength: 60, PeriodMs: 500), Effects, Changed));
         Changed();
     }
-
-    private EffectItemViewModel CreateEffect(FrameEffect effect) =>
-        new(effect, showFrameSelection: false, frames: () => Array.Empty<System.Windows.Media.Imaging.BitmapSource>(),
-            commit: Changed,
-            remove: item =>
-            {
-                Effects.Remove(item);
-                Changed();
-            });
 
     public void AppendKey(string spec)
     {

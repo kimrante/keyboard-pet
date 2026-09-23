@@ -67,14 +67,14 @@ public sealed class AnimationService : IDisposable
     /// <summary>세트 목록/규칙이 다시 적용된 뒤 발생. 설정 창이 상태 표시를 갱신하는 데 쓴다.</summary>
     public event Action? Reloaded;
 
-    /// <summary>키 규칙이 활성화될 때마다 발생. 규칙 효과 재생(EffectService)의 시작 신호.</summary>
+    /// <summary>키 규칙이 활성화될 때마다(같은 규칙 재입력 포함) 발생. 규칙 효과를 처음부터 재생하는 신호.</summary>
     public event Action<KeyRule>? RuleActivated;
+
+    /// <summary>화면의 프레임이 바뀔 때 발생(프레임 번호).</summary>
+    public event Action<int>? FrameChanged;
 
     /// <summary>지금 활성인 키 규칙(유지 시간 중). 없으면 null.</summary>
     public KeyRule? ActiveRule => _rules?.ActiveRule;
-
-    /// <summary>규칙이 활성화될 때마다 늘어나는 번호. 규칙 목록을 다시 구성해도 이어진다.</summary>
-    public long RuleActivationSerial { get; private set; }
 
     /// <summary>지금 화면에 보이는 프레임 번호.</summary>
     public int CurrentFrameIndex => _engine.FrameIndex;
@@ -222,11 +222,7 @@ public sealed class AnimationService : IDisposable
 
         _rules = new KeyRuleController(_timers, matcher);
         _rules.DisplayChanged += Show;
-        _rules.RuleActivated += rule =>
-        {
-            RuleActivationSerial++;
-            RuleActivated?.Invoke(rule);
-        };
+        _rules.RuleActivated += rule => RuleActivated?.Invoke(rule);
     }
 
     private void ShowDefault() => Show(new DisplayRequest(true));
@@ -245,6 +241,7 @@ public sealed class AnimationService : IDisposable
     private void OnFrameChanged(int index)
     {
         _shell.CurrentFrame = index >= 0 && index < _active.Frames.Count ? _active.Frames[index] : null;
+        FrameChanged?.Invoke(index);
     }
 
     private static string[] PackUris(string set, int count) =>
