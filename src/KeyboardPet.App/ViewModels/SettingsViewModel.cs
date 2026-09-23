@@ -25,6 +25,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _syncing;
     private RuleItemViewModel? _captureTarget;
 
+    /// <summary>저장이 미뤄진 동안 삭제된 세트 이름. 다음 저장 때 그 세트의 설정도 함께 지운다.</summary>
+    private readonly List<string> _pendingRemovals = new();
+
     // ── 일반 ──
     [ObservableProperty] private bool _isTopmost;
     [ObservableProperty] private double _scale;
@@ -49,6 +52,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _adaptiveWindowMs;
 
     // ── 이미지 세트 ──
+    /// <summary>사용 중인 세트. 애니메이션·키 매핑 탭은 이 세트의 설정을 편집한다.</summary>
     [ObservableProperty] private string? _defaultFrameSet;
 
     // ── 키 매핑 ──
@@ -58,10 +62,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     // ── 정보 ──
     [ObservableProperty] private string? _statusMessage;
 
-    /// <summary>현재 내장 세트로 대체되고 있는 이름들의 요약. 예: "idle (4프레임), jump (2프레임)"</summary>
+    /// <summary>내장 예시 세트의 사용 상태 요약.</summary>
     [ObservableProperty] private string _builtInSummary = string.Empty;
 
-    /// <summary>애니메이션·키 매핑 탭이 어느 세트의 프로필을 편집 중인지.</summary>
+    /// <summary>애니메이션·키 매핑 탭이 어느 세트의 설정을 편집 중인지.</summary>
     [ObservableProperty] private string _profileTargetText = string.Empty;
 
     public SettingsViewModel(SettingsService settings, AnimationService animation, IKeyboardSource keyboard)
@@ -136,23 +140,54 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     // ── 커밋 (항목 뷰모델이 호출) ──
 
-    public void CommitFrameSets()
+    /// <param name="removedName">삭제된 세트의 이름. 그 세트에 귀속된 설정도 함께 지운다.</param>
+    public void CommitFrameSets(string? removedName = null)
     {
+        if (removedName is not null)
+        {
+            _pendingRemovals.Add(removedName);
+        }
+
+        // 이름이 비었거나 겹치는 세트가 있으면 고칠 때까지 저장을 미룬다. 그대로 저장하면 이름 없는 세트는
+        // 정규화에서 빠지고(카드와 설정이 함께 사라짐), 겹치는 이름은 세트에 귀속된 설정을 서로 덮어쓴다.
+        if (FrameSets.Any(f => string.IsNullOrWhiteSpace(f.Name)))
+        {
+            StatusMessage = "세트 이름을 입력하세요. 이름이 비어 있는 동안에는 세트 변경이 저장되지 않습니다.";
+            return;
+        }
+
+        var duplicate = FrameSets
+            .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+        {
+            StatusMessage = $"세트 이름 '{duplicate.Key}'이(가) 겹칩니다. 이름을 바꿀 때까지 세트 변경이 저장되지 않습니다.";
+            return;
+        }
+
+        // 삭제는 이름 변경보다 먼저 적용한다(삭제한 세트의 이름을 다른 세트가 이어받는 경우 옛 설정을 먼저 지운다).
+        var removals = _pendingRemovals
+            .Where(name => !FrameSets.Any(f => string.Equals(f.CommittedName, name, StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _pendingRemovals.Clear();
+
         var renames = FrameSets
-            .Where(f => !string.Equals(f.CommittedName, f.Name, StringComparison.OrdinalIgnoreCase))
-            .Select(f => (Old: f.CommittedName, New: f.Name))
+            .Where(f => !string.Equals(f.CommittedName, f.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Select(f => (Old: f.CommittedName, New: f.Name.Trim()))
             .ToList();
 
         Push(s =>
         {
-            // 이름이 바뀐 세트는 프로필과 기본 세트 참조도 따라가게 한다.
-            var next = renames.Aggregate(s, (acc, r) => acc.WithSetRenamed(r.Old, r.New));
+            // 세트에 귀속된 설정(애니메이션·키 매핑)과 사용 중인 세트 참조가 이름 변경·삭제를 따라가게 한다.
+            var next = removals.Aggregate(s, (acc, name) => acc.WithSetRemoved(name));
+            next = renames.Aggregate(next, (acc, r) => acc.WithSetRenamed(r.Old, r.New));
             return next with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() };
         });
 
         foreach (var item in FrameSets)
         {
-            item.CommittedName = item.Name;
+            item.CommittedName = item.Name.Trim();
         }
     }
 
@@ -163,7 +198,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// <summary>세트의 루프 프레임 인덱스. 전체가 루프면 null.</summary>
     public IReadOnlyList<int>? GetLoopFrames(string setName) => _animation.TryGetLoopFrames(setName);
 
-    /// <summary>규칙은 현재 기본 세트의 프로필에 저장된다.</summary>
+    /// <summary>규칙은 사용 중인 세트의 프로필에 저장된다.</summary>
     public void CommitRules()
     {
         Push(s => s.WithEffectiveRules(Rules.Select(r => r.ToRule()).ToList()));
@@ -194,7 +229,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private void RemoveFrameSet(FrameSetItemViewModel item)
     {
         FrameSets.Remove(item);
-        CommitFrameSets();
+        CommitFrameSets(item.CommittedName);
     }
 
     /// <summary>폴더 없이 빈 세트를 만든다. 앱 관리 폴더를 만들어 두고, 이미지는 카드에 끌어다 넣는다.</summary>
@@ -319,10 +354,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void AddRule()
     {
-        var set = DefaultFrameSet is { Length: > 0 } d && AvailableSetNames.Contains(d)
-            ? d
-            : AvailableSetNames.FirstOrDefault() ?? AppSettings.BuiltInDefaultSet;
-        Rules.Add(new RuleItemViewModel(this, new KeyRule(Array.Empty<string>(), set, HoldMs: 500, ResetIndex: true)));
+        Rules.Add(new RuleItemViewModel(this, new KeyRule(Array.Empty<string>(), HoldMs: 500, ResetIndex: true)));
         CommitRules();
     }
 
@@ -393,7 +425,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnStartWithWindowsChanged(bool value) => Push(s => s with { StartWithWindows = value });
     partial void OnCountAutoRepeatChanged(bool value) => Push(s => s with { CountAutoRepeat = value });
 
-    // 애니메이션 옵션은 현재 기본 세트의 프로필에 기록된다.
+    // 애니메이션 옵션은 사용 중인 세트의 프로필에 기록된다.
     private void PushAnimation(Func<AnimationOptions, AnimationOptions> mutate) =>
         Push(s => s.WithEffectiveAnimation(mutate(s.EffectiveAnimation)));
 
@@ -417,8 +449,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     {
         if (!string.IsNullOrEmpty(value))
         {
-            // 프로필이 없는 세트로 바꾸면 지금 설정을 복사해 시작한다(설정이 갑자기 초기화되지 않도록).
-            Push(s => s.WithDefaultFrameSet(value));
+            // 세트마다 자기 애니메이션·키 매핑을 가지므로, 세트를 바꾸면 그 세트의 설정으로 전환된다.
+            Push(s => s with { DefaultFrameSet = value });
         }
     }
 
@@ -458,8 +490,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             AdaptiveFastMs = animation.AdaptiveFastMs;
             AdaptiveTargetKeysPerSecond = animation.AdaptiveTargetKeysPerSecond;
             AdaptiveWindowMs = animation.AdaptiveWindowMs;
-
-            ProfileTargetText = $"세트 '{s.DefaultFrameSet}'의 설정을 편집 중입니다. 기본 세트를 바꾸면 그 세트에 저장된 설정으로 전환됩니다.";
 
             var currentSets = FrameSets.Select(f => f.ToSettings()).ToList();
             if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
@@ -537,12 +567,25 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
         var builtIns = _animation.SetStatuses
             .Where(kv => kv.Value.IsBuiltIn)
-            .OrderBy(kv => AnimationService.BuiltInSetNames.ToList().IndexOf(kv.Key))
-            .Select(kv => $"{kv.Key} ({kv.Value.FrameCount}프레임)")
+            .Select(kv => $"'{kv.Key}' ({kv.Value.FrameCount}프레임)")
             .ToList();
         BuiltInSummary = builtIns.Count == 0
-            ? "내장 세트는 모두 사용자 세트로 대체되었습니다."
-            : "현재 내장 세트 사용 중: " + string.Join(", ", builtIns);
+            ? "내장 예시 세트는 같은 이름의 사용자 세트로 대체되었습니다."
+            : "내장 세트: " + string.Join(", ", builtIns) + " — 목록에 없어도 사용할 세트로 고를 수 있습니다.";
+
+        RefreshProfileTargetText();
+    }
+
+    private void RefreshProfileTargetText()
+    {
+        var name = _settings.Current.DefaultFrameSet;
+        var text = $"세트 '{name}'의 설정을 편집 중입니다. 애니메이션과 키 매핑은 세트마다 따로 저장되며, 사용할 세트를 바꾸면 그 세트의 설정으로 전환됩니다.";
+        if (!string.Equals(_animation.DefaultSetName, name, StringComparison.OrdinalIgnoreCase))
+        {
+            text += $"\n세트 '{name}'에 표시할 프레임이 없어 지금은 '{_animation.DefaultSetName}' 세트가 대신 표시됩니다.";
+        }
+
+        ProfileTargetText = text;
     }
 
     private void MoveRule(RuleItemViewModel item, int delta)

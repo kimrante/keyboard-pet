@@ -8,11 +8,11 @@ public class AppSettingsTests
     [Fact]
     public void RulesEqual_ComparesByValueIncludingKeys()
     {
-        var a = new[] { new KeyRule(new[] { "Enter", "Space" }, "jump", 800, true) };
-        var same = new[] { new KeyRule(new[] { "Enter", "Space" }, "jump", 800, true) };
-        var differentKeys = new[] { new KeyRule(new[] { "Enter" }, "jump", 800, true) };
-        var differentHold = new[] { new KeyRule(new[] { "Enter", "Space" }, "jump", 900, true) };
-        var differentFrame = new[] { new KeyRule(new[] { "Enter", "Space" }, "jump", 800, true, FrameIndex: 1) };
+        var a = new[] { new KeyRule(new[] { "Enter", "Space" }, 800, true) };
+        var same = new[] { new KeyRule(new[] { "Enter", "Space" }, 800, true) };
+        var differentKeys = new[] { new KeyRule(new[] { "Enter" }, 800, true) };
+        var differentHold = new[] { new KeyRule(new[] { "Enter", "Space" }, 900, true) };
+        var differentFrame = new[] { new KeyRule(new[] { "Enter", "Space" }, 800, true, FrameIndex: 1) };
 
         Assert.True(AppSettings.RulesEqual(a, same));
         Assert.False(AppSettings.RulesEqual(a, differentKeys));
@@ -54,12 +54,14 @@ public class AppSettingsTests
     }
 
     [Fact]
-    public void Default_HasBuiltInRules()
+    public void Default_UsesExampleSet_WithExampleRules()
     {
         var s = AppSettings.Default;
 
-        Assert.Equal("jump", s.Rules[0].FrameSet);
-        Assert.Equal("typing", s.Rules[1].FrameSet);
-        Assert.Equal(AppSettings.BuiltInDefaultSet, s.DefaultFrameSet);
+        Assert.Equal(AppSettings.ExampleSetName, s.DefaultFrameSet);
+        Assert.Equal("예시", s.DefaultFrameSet);
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, s.EffectiveRules));
+        Assert.Equal(1, s.EffectiveRules[0].FrameIndex);
+        Assert.Empty(s.SetProfiles);
     }
 }

@@ -5,24 +5,24 @@ using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.App.ViewModels;
 
-/// <summary>규칙의 "프레임" 콤보박스 항목. Index가 null이면 세트 전체 애니메이션.</summary>
+/// <summary>규칙의 "프레임" 콤보박스 항목. Index가 null이면 세트의 루프 애니메이션.</summary>
 public sealed record FrameChoice(int? Index, string Label, ImageSource? Thumbnail)
 {
-    public static FrameChoice WholeSet { get; } = new(null, "전체 애니메이션", null);
+    public static FrameChoice WholeSet { get; } = new(null, "애니메이션 재생", null);
 
     public override string ToString() => Label;
 }
 
-/// <summary>설정 창 "키 매핑" 탭의 한 행. 편집 즉시 검증하고 소유자에게 커밋한다.</summary>
+/// <summary>
+/// 설정 창 "키 매핑" 탭의 한 행. 규칙은 사용 중인 세트에 귀속되므로 프레임 목록도 그 세트에서 가져온다.
+/// 편집 즉시 검증하고 소유자에게 커밋한다.
+/// </summary>
 public sealed partial class RuleItemViewModel : ObservableObject
 {
     private bool _refreshingChoices;
 
     [ObservableProperty]
     private string _keysText;
-
-    [ObservableProperty]
-    private string _frameSet;
 
     [ObservableProperty]
     private int _holdMs;
@@ -40,7 +40,6 @@ public sealed partial class RuleItemViewModel : ObservableObject
     {
         Owner = owner;
         _keysText = string.Join(", ", rule.Keys);
-        _frameSet = rule.FrameSet;
         _holdMs = rule.HoldMs;
         _resetIndex = rule.ResetIndex;
         RefreshFrameChoices(rule.FrameIndex);
@@ -53,7 +52,7 @@ public sealed partial class RuleItemViewModel : ObservableObject
 
     public int? FrameIndex => SelectedFrame?.Index;
 
-    public KeyRule ToRule() => new(ParseKeys(), FrameSet ?? string.Empty, Math.Max(0, HoldMs), ResetIndex, FrameIndex);
+    public KeyRule ToRule() => new(ParseKeys(), Math.Max(0, HoldMs), ResetIndex, FrameIndex);
 
     public void AppendKey(string spec)
     {
@@ -66,19 +65,26 @@ public sealed partial class RuleItemViewModel : ObservableObject
         Validate();
     }
 
-    /// <summary>선택된 세트의 프레임 목록으로 콤보박스 항목을 다시 만든다. 가능하면 기존 선택을 유지한다.</summary>
+    /// <summary>사용 중인 세트의 프레임 목록으로 콤보박스 항목을 다시 만든다. 가능하면 기존 선택을 유지한다.</summary>
     public void RefreshFrameChoices(int? keepIndex)
     {
         _refreshingChoices = true;
         try
         {
-            var frames = Owner.GetFrames(FrameSet ?? string.Empty);
-            var loop = Owner.GetLoopFrames(FrameSet ?? string.Empty);
+            var setName = Owner.DefaultFrameSet ?? string.Empty;
+            var frames = Owner.GetFrames(setName);
+            var loop = Owner.GetLoopFrames(setName);
             var choices = new List<FrameChoice> { FrameChoice.WholeSet };
             for (var i = 0; i < frames.Count; i++)
             {
                 var keyOnly = loop is not null && !loop.Contains(i);
                 choices.Add(new FrameChoice(i, keyOnly ? $"{i + 1}번 프레임 (키 전용)" : $"{i + 1}번 프레임", frames[i]));
+            }
+
+            // 세트가 아직 로드되지 않았거나 프레임이 줄었어도 저장된 선택을 잃지 않도록 자리표시 항목을 하나 둔다.
+            if (keepIndex is int k && k >= frames.Count)
+            {
+                choices.Add(new FrameChoice(k, $"{(long)k + 1}번 프레임 (없음)", null));
             }
 
             if (!choices.SequenceEqual(FrameChoices))
@@ -90,9 +96,7 @@ public sealed partial class RuleItemViewModel : ObservableObject
                 }
             }
 
-            SelectedFrame = keepIndex is int k && k >= 0 && k < frames.Count
-                ? FrameChoices[k + 1]
-                : FrameChoice.WholeSet;
+            SelectedFrame = FrameChoices.FirstOrDefault(c => c.Index is not null && c.Index == keepIndex) ?? FrameChoice.WholeSet;
         }
         finally
         {
@@ -101,12 +105,6 @@ public sealed partial class RuleItemViewModel : ObservableObject
     }
 
     partial void OnKeysTextChanged(string value) => Changed();
-
-    partial void OnFrameSetChanged(string value)
-    {
-        RefreshFrameChoices(FrameIndex);
-        Changed();
-    }
 
     partial void OnHoldMsChanged(int value) => Changed();
 
@@ -148,9 +146,12 @@ public sealed partial class RuleItemViewModel : ObservableObject
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(FrameSet) || !Owner.AvailableSetNames.Contains(FrameSet, StringComparer.OrdinalIgnoreCase))
+        if (SelectedFrame?.Thumbnail is null && FrameIndex is int missing)
         {
-            Error = "이미지 세트를 선택하세요.";
+            // 세트에 프레임이 하나도 없으면(빈 세트·폴더 없음) 예시 세트가 대신 보이므로 '마지막 프레임' 안내는 맞지 않다.
+            Error = FrameChoices.Any(c => c.Thumbnail is not null)
+                ? $"사용 중인 세트에 {(long)missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다."
+                : $"사용 중인 세트에 표시할 프레임이 없습니다. 이미지를 추가하면 {(long)missing + 1}번 프레임이 쓰입니다.";
             return;
         }
 

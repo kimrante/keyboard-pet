@@ -143,10 +143,35 @@ public class AnimationEngineTests
         engine.SetActiveSet(set, resetIndex: true, pinnedFrame: 3);   // 키 전용 프레임 고정
         Assert.Equal(3, engine.FrameIndex);
 
-        engine.SetActiveSet(set, resetIndex: false);       // 고정 해제, 인덱스 유지(3은 루프 밖)
-        Assert.Equal(3, engine.FrameIndex);
+        engine.SetActiveSet(set, resetIndex: false);       // 고정 해제: 3은 루프 밖이라 이어서 재생할 수 없다
+        Assert.Equal(0, engine.FrameIndex);                // 키 전용 프레임에 머물지 않고 루프 처음으로
         engine.Advance();
-        Assert.Equal(0, engine.FrameIndex);                // 루프의 첫 프레임으로 진입
+        Assert.Equal(1, engine.FrameIndex);
+    }
+
+    [Fact]
+    public void Unpin_WithoutReset_FromLoopFrame_KeepsIndex()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        var set = new FrameSet("s", 4, LoopFrames: new[] { 0, 1, 2 });
+        engine.SetActiveSet(set, resetIndex: true, pinnedFrame: 2);
+
+        engine.SetActiveSet(set, resetIndex: false);
+
+        Assert.Equal(2, engine.FrameIndex);
+        Assert.False(engine.IsPinned);
+    }
+
+    [Fact]
+    public void Unpin_KeyOnlyFrame_InSingleFrameLoop_DoesNotGetStuck()
+    {
+        var engine = new AnimationEngine(new FakeTimerFactory());
+        var set = new FrameSet("s", 2, LoopFrames: new[] { 0 });
+        engine.SetActiveSet(set, resetIndex: true, pinnedFrame: 1);
+
+        engine.SetActiveSet(set, resetIndex: false);
+
+        Assert.Equal(0, engine.FrameIndex);
     }
 
     [Fact]

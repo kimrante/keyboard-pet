@@ -12,84 +12,95 @@ public class KeyRuleControllerTests
 
     private static KeyEvent Down(int vk) => new(vk, true, KeyModifiers.None, false);
 
-    private static ActiveSetRequest Req(string set, bool reset, int? frame = null) => new(set, reset, frame);
+    private static DisplayRequest Req(bool reset, int? frame = null) => new(reset, frame);
 
-    private static (KeyRuleController Controller, FakeTimerFactory Timers, List<ActiveSetRequest> Events) Build(params KeyRule[] rules)
+    private static (KeyRuleController Controller, FakeTimerFactory Timers, List<DisplayRequest> Events) Build(params KeyRule[] rules)
     {
         var timers = new FakeTimerFactory();
-        var controller = new KeyRuleController(timers, new RuleMatcher(rules), "idle");
-        var events = new List<ActiveSetRequest>();
-        controller.ActiveSetChanged += events.Add;
+        var controller = new KeyRuleController(timers, new RuleMatcher(rules));
+        var events = new List<DisplayRequest>();
+        controller.DisplayChanged += events.Add;
         return (controller, timers, events);
     }
 
     [Fact]
-    public void StartsOnDefaultSet()
+    public void StartsOnAnimation()
     {
         var (controller, _, events) = Build();
 
-        Assert.Equal("idle", controller.ActiveFrameSet);
         Assert.Null(controller.ActiveRule);
         Assert.Null(controller.ActiveFrameIndex);
         Assert.Empty(events);
     }
 
     [Fact]
-    public void MatchedRule_ActivatesSet_AndStartsHoldTimer()
+    public void MatchedFrameRule_PinsFrame_AndStartsHoldTimer()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "jump", HoldMs: 800, ResetIndex: true));
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, ResetIndex: true, FrameIndex: 1));
 
         var matched = controller.OnKeyDown(Down(VkEnter));
 
         Assert.NotNull(matched);
-        Assert.Equal("jump", controller.ActiveFrameSet);
-        Assert.Equal(new[] { Req("jump", true) }, events);
+        Assert.Equal(1, controller.ActiveFrameIndex);
+        Assert.Equal(new[] { Req(true, 1) }, events);
         Assert.True(controller.IsHolding);
         Assert.Equal(TimeSpan.FromMilliseconds(800), timers.Last.Interval);
     }
 
     [Fact]
-    public void HoldExpiry_ReturnsToDefault()
+    public void HoldExpiry_ReturnsToAnimation()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "jump", HoldMs: 800));
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, FrameIndex: 1));
         controller.OnKeyDown(Down(VkEnter));
 
         timers.Last.Fire();
 
-        Assert.Equal("idle", controller.ActiveFrameSet);
+        Assert.Null(controller.ActiveFrameIndex);
         Assert.Null(controller.ActiveRule);
         Assert.False(controller.IsHolding);
-        Assert.Equal(Req("idle", true), events[^1]);
+        Assert.Equal(new[] { Req(true, 1), Req(true) }, events);
+    }
+
+    [Fact]
+    public void AnimationRule_WithResetIndex_RestartsAnimation_AndExpiryDoesNotRestartAgain()
+    {
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, ResetIndex: true));
+        controller.OnKeyDown(Down(VkEnter));
+
+        timers.Last.Fire();
+
+        Assert.Equal(new[] { Req(true) }, events);
+        Assert.Null(controller.ActiveRule);
     }
 
     [Fact]
     public void HoldZero_StaysUntilAnotherRuleMatches()
     {
         var (controller, timers, events) = Build(
-            new KeyRule("Enter", "jump", HoldMs: 0),
-            new KeyRule("Space", "blink", HoldMs: 0));
+            new KeyRule("Enter", HoldMs: 0, FrameIndex: 1),
+            new KeyRule("Space", HoldMs: 0, FrameIndex: 2));
         controller.OnKeyDown(Down(VkEnter));
 
         Assert.False(controller.IsHolding);
         controller.OnKeyDown(Down(VkA));  // 미매칭: 유지
-        Assert.Equal("jump", controller.ActiveFrameSet);
+        Assert.Equal(1, controller.ActiveFrameIndex);
 
         controller.OnKeyDown(Down(VkSpace));
-        Assert.Equal("blink", controller.ActiveFrameSet);
-        Assert.Equal(new[] { Req("jump", true), Req("blink", true) }, events);
+        Assert.Equal(2, controller.ActiveFrameIndex);
+        Assert.Equal(new[] { Req(true, 1), Req(true, 2) }, events);
     }
 
     [Fact]
     public void UnmatchedKey_DoesNotChangeAnything()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "jump", HoldMs: 800));
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, FrameIndex: 1));
         controller.OnKeyDown(Down(VkEnter));
         var startCount = timers.Last.StartCount;
 
         var matched = controller.OnKeyDown(Down(VkA));
 
         Assert.Null(matched);
-        Assert.Equal("jump", controller.ActiveFrameSet);
+        Assert.Equal(1, controller.ActiveFrameIndex);
         Assert.Equal(startCount, timers.Last.StartCount);
         Assert.Single(events);
     }
@@ -97,82 +108,69 @@ public class KeyRuleControllerTests
     [Fact]
     public void SameRuleAgain_RestartsHoldTimer_AndReplaysWhenResetIndex()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "jump", HoldMs: 800, ResetIndex: true));
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, ResetIndex: true));
         controller.OnKeyDown(Down(VkEnter));
 
         controller.OnKeyDown(Down(VkEnter));
 
         Assert.Equal(2, timers.Last.StartCount);
-        Assert.Equal(new[] { Req("jump", true), Req("jump", true) }, events);
+        Assert.Equal(new[] { Req(true), Req(true) }, events);
     }
 
     [Fact]
-    public void SameRuleAgain_WithoutResetIndex_DoesNotRaiseAgain()
+    public void AnimationRule_WithoutResetIndex_DoesNotInterruptLoop()
     {
-        var (controller, timers, events) = Build(new KeyRule("*", "typing", HoldMs: 600, ResetIndex: false));
+        var (controller, timers, events) = Build(new KeyRule("*", HoldMs: 600, ResetIndex: false));
         controller.OnKeyDown(Down(VkA));
 
         controller.OnKeyDown(Down(VkA));
         controller.OnKeyDown(Down(VkSpace));
-
-        Assert.Equal(3, timers.Last.StartCount);
-        Assert.Equal(new[] { Req("typing", false) }, events);
-    }
-
-    [Fact]
-    public void SingleFrameRule_RequestsPinnedFrame_AndReturnsToDefaultAfterHold()
-    {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "idle", HoldMs: 500, ResetIndex: true, FrameIndex: 2));
-
-        controller.OnKeyDown(Down(VkEnter));
-
-        Assert.Equal(2, controller.ActiveFrameIndex);
-        Assert.Equal(new[] { Req("idle", true, 2) }, events);
-
         timers.Last.Fire();
 
-        Assert.Null(controller.ActiveFrameIndex);
-        Assert.Equal(Req("idle", true), events[^1]);
+        Assert.Equal(3, timers.Last.StartCount);
+        Assert.Empty(events);
     }
 
     [Fact]
-    public void DifferentFrameOfSameSet_WithoutResetIndex_StillRaises()
+    public void DifferentFrame_WithoutResetIndex_StillRaises()
     {
         var (controller, _, events) = Build(
-            new KeyRule("Enter", "idle", HoldMs: 0, ResetIndex: false, FrameIndex: 1),
-            new KeyRule("Space", "idle", HoldMs: 0, ResetIndex: false, FrameIndex: 3));
+            new KeyRule("Enter", HoldMs: 0, ResetIndex: false, FrameIndex: 1),
+            new KeyRule("Space", HoldMs: 0, ResetIndex: false, FrameIndex: 3));
 
         controller.OnKeyDown(Down(VkEnter));
         controller.OnKeyDown(Down(VkEnter));   // 같은 대상: 이벤트 없음
         controller.OnKeyDown(Down(VkSpace));   // 다른 프레임: 이벤트
 
-        Assert.Equal(new[] { Req("idle", false, 1), Req("idle", false, 3) }, events);
+        Assert.Equal(new[] { Req(false, 1), Req(false, 3) }, events);
     }
 
     [Fact]
-    public void ResetToDefault_FromPinnedFrameOnDefaultSet_Raises()
+    public void AnimationRule_AfterPinnedFrame_UnpinsEvenWithoutResetIndex()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "idle", HoldMs: 0, FrameIndex: 2));
-        controller.OnKeyDown(Down(VkEnter));
+        var (controller, _, events) = Build(
+            new KeyRule("Enter", HoldMs: 0, FrameIndex: 1),
+            new KeyRule("Space", HoldMs: 0, ResetIndex: false));
 
-        controller.ResetToDefault();
+        controller.OnKeyDown(Down(VkEnter));
+        controller.OnKeyDown(Down(VkSpace));
 
         Assert.Null(controller.ActiveFrameIndex);
-        Assert.Equal(new[] { Req("idle", true, 2), Req("idle", true) }, events);
+        Assert.Equal(new[] { Req(true, 1), Req(false) }, events);
     }
 
     [Fact]
     public void ResetToDefault_StopsTimerAndRaisesOnce()
     {
-        var (controller, timers, events) = Build(new KeyRule("Enter", "jump", HoldMs: 800));
+        var (controller, timers, events) = Build(new KeyRule("Enter", HoldMs: 800, FrameIndex: 2));
         controller.OnKeyDown(Down(VkEnter));
 
         controller.ResetToDefault();
         controller.ResetToDefault();
 
-        Assert.Equal("idle", controller.ActiveFrameSet);
+        Assert.Null(controller.ActiveFrameIndex);
         Assert.False(timers.Last.IsRunning);
-        Assert.Equal(new[] { Req("jump", true), Req("idle", true) }, events);
+        Assert.Equal(new[] { Req(true, 2), Req(true) }, events);
     }
 
     [Fact]

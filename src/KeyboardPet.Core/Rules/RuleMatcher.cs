@@ -26,7 +26,7 @@ public sealed class RuleMatcher
                 }
                 else
                 {
-                    _errors.Add($"규칙 #{index} ('{rule.FrameSet}'): 키 이름 '{key}'을(를) 해석할 수 없어 무시합니다.");
+                    _errors.Add($"규칙 #{index}: 키 이름 '{key}'을(를) 해석할 수 없어 무시합니다.");
                 }
             }
 
@@ -37,7 +37,7 @@ public sealed class RuleMatcher
             else if (rule.Keys.Count == 0)
             {
                 // 키가 하나도 없는 규칙만 별도 보고한다. 키가 전부 무효인 경우는 위의 키별 오류로 이미 설명된다.
-                _errors.Add($"규칙 #{index} ('{rule.FrameSet}'): 키가 지정되지 않아 무시합니다.");
+                _errors.Add($"규칙 #{index}: 키가 지정되지 않아 무시합니다.");
             }
         }
     }

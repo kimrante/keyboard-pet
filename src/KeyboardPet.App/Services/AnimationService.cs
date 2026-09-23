@@ -20,16 +20,15 @@ public sealed record FrameSetStatus(int FrameCount, bool IsBuiltIn, string? Erro
 
 /// <summary>
 /// 이미지 세트들, AnimationEngine, KeyRuleController를 묶어 ShellViewModel.CurrentFrame에 프레임을 공급한다.
-/// 설정(세트 목록, 기본 세트, 규칙, 애니메이션 옵션)이 바뀌면 해당 부분만 다시 적용한다.
-/// 내장 세트(idle/jump/typing)는 같은 이름의 사용자 세트가 없을 때 대체로 쓰인다.
+/// 사용 중인 세트 하나만 화면에 나오며, 애니메이션 옵션과 키 매핑 규칙은 그 세트의 프로필을 따른다.
+/// 설정(세트 목록, 사용 중인 세트, 규칙, 애니메이션 옵션)이 바뀌면 해당 부분만 다시 적용한다.
+/// 내장 '예시' 세트는 같은 이름의 사용자 세트가 없을 때 쓰이며, 사용 중인 세트를 쓸 수 없을 때의 대체이기도 하다.
 /// </summary>
 public sealed class AnimationService : IDisposable
 {
     private static readonly Dictionary<string, string[]> BuiltInSets = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["idle"] = PackUris("idle", 4),
-        ["jump"] = PackUris("jump", 2),
-        ["typing"] = PackUris("typing", 2),
+        [AppSettings.ExampleSetName] = PackUris("example", 2),
     };
 
     private readonly AnimationEngine _engine;
@@ -58,7 +57,7 @@ public sealed class AnimationService : IDisposable
 
     public static IReadOnlyList<string> BuiltInSetNames { get; } = BuiltInSets.Keys.ToList();
 
-    /// <summary>현재 실제로 사용 중인 기본 세트 이름(설정의 기본 세트가 없으면 idle).</summary>
+    /// <summary>현재 실제로 화면에 쓰는 세트 이름(설정의 세트를 쓸 수 없으면 예시 세트).</summary>
     public string DefaultSetName { get; private set; } = AppSettings.BuiltInDefaultSet;
 
     public IReadOnlyDictionary<string, FrameSetStatus> SetStatuses => _statuses;
@@ -79,7 +78,7 @@ public sealed class AnimationService : IDisposable
     }
 
     /// <summary>
-    /// 키 다운 1건. 규칙 매칭 → 세트 전환 → 타수 스케줄러 순으로 처리한다.
+    /// 키 다운 1건. 규칙 매칭 → 표시 전환 → 타수 스케줄러 순으로 처리한다.
     /// 조합키 단독 입력(Shift, Ctrl 등)은 규칙에는 전달하지만 타수 스케줄러는 움직이지 않는다.
     /// </summary>
     public void OnKeyDown(KeyEvent e)
@@ -112,7 +111,8 @@ public sealed class AnimationService : IDisposable
         var setsChanged = !AppSettings.FrameSetsEqual(old.FrameSets, @new.FrameSets)
                           || !string.Equals(old.DefaultFrameSet, @new.DefaultFrameSet, StringComparison.OrdinalIgnoreCase);
 
-        // 규칙과 애니메이션 옵션은 기본 세트의 프로필을 따른다(EffectiveRules / EffectiveAnimation).
+        // 규칙과 애니메이션 옵션은 고른 세트의 프로필을 따른다(EffectiveRules / EffectiveAnimation).
+        // 고른 세트에 프레임이 없어 예시 세트가 대신 보일 때도 설정 창·트레이에서 편집한 값이 그대로 반영되도록 한다.
         if (setsChanged)
         {
             ReloadAll(@new);
@@ -188,27 +188,19 @@ public sealed class AnimationService : IDisposable
     {
         _rules?.Dispose();
 
+        // 규칙은 모두 화면에 쓰는 세트의 프레임을 가리킨다.
+        var frameCount = _sets.TryGetValue(DefaultSetName, out var set) ? set.Set.FrameCount : 0;
         var errors = new List<string>();
-        var usable = new List<KeyRule>();
-        var index = 0;
-        foreach (var rule in rules)
+        var list = rules.ToList();
+        for (var i = 0; i < list.Count; i++)
         {
-            index++;
-            if (!_sets.TryGetValue(rule.FrameSet, out var set))
+            if (list[i].FrameIndex is int frame && frame >= frameCount)
             {
-                errors.Add($"규칙 #{index}: 세트 '{rule.FrameSet}'이(가) 없어 무시합니다.");
-                continue;
+                errors.Add($"규칙 #{i + 1}: 세트 '{DefaultSetName}'에 {frame + 1}번 프레임이 없어 마지막 프레임을 사용합니다.");
             }
-
-            if (rule.FrameIndex is int frame && frame >= set.Set.FrameCount)
-            {
-                errors.Add($"규칙 #{index}: 세트 '{rule.FrameSet}'에 {frame + 1}번 프레임이 없어 마지막 프레임을 사용합니다.");
-            }
-
-            usable.Add(rule);
         }
 
-        var matcher = new RuleMatcher(usable);
+        var matcher = new RuleMatcher(list);
         errors.AddRange(matcher.Errors);
         RuleErrors = errors;
         foreach (var error in errors)
@@ -216,27 +208,21 @@ public sealed class AnimationService : IDisposable
             Debug.WriteLine($"[KeyboardPet] {error}");
         }
 
-        _rules = new KeyRuleController(_timers, matcher, DefaultSetName);
-        _rules.ActiveSetChanged += Show;
+        _rules = new KeyRuleController(_timers, matcher);
+        _rules.DisplayChanged += Show;
     }
 
-    private void ShowDefault() => Show(new ActiveSetRequest(DefaultSetName, true));
+    private void ShowDefault() => Show(new DisplayRequest(true));
 
-    private void Show(ActiveSetRequest request)
+    private void Show(DisplayRequest request)
     {
-        var frameIndex = request.FrameIndex;
-        if (!_sets.TryGetValue(request.FrameSet, out var set))
+        if (!_sets.TryGetValue(DefaultSetName, out var set))
         {
-            // 요청한 세트가 없으면 기본 세트로 대체하되, 다른 세트의 프레임 번호를 그대로 고정하면 안 된다.
-            frameIndex = null;
-            if (!_sets.TryGetValue(DefaultSetName, out set))
-            {
-                set = _sets[AppSettings.BuiltInDefaultSet];
-            }
+            set = _sets[AppSettings.BuiltInDefaultSet];
         }
 
         _active = set;
-        _engine.SetActiveSet(set.Set, request.ResetIndex, frameIndex);
+        _engine.SetActiveSet(set.Set, request.ResetIndex, request.FrameIndex);
     }
 
     private void OnFrameChanged(int index)

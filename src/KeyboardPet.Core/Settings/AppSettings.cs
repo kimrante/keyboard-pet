@@ -67,8 +67,8 @@ public sealed record FrameSetSettings(
 }
 
 /// <summary>
-/// 세트별 프로필: 그 세트가 기본 세트일 때 적용되는 애니메이션 옵션과 키 매핑 규칙.
-/// 항목이 null이면 공통 설정(AppSettings.Animation / Rules)을 쓴다.
+/// 이미지 세트에 귀속된 설정: 그 세트가 사용 중일 때 적용되는 애니메이션 옵션과 키 매핑 규칙.
+/// 항목이 null이면 세트 기본값(<see cref="AppSettings.DefaultRulesFor"/>, 기본 AnimationOptions)을 쓴다.
 /// </summary>
 public sealed record SetProfile(AnimationOptions? Animation = null, IReadOnlyList<KeyRule>? Rules = null);
 
@@ -76,27 +76,33 @@ public sealed record SetProfile(AnimationOptions? Animation = null, IReadOnlyLis
 /// 앱 전체 설정. 불변 레코드이며 변경은 with 식으로 새 인스턴스를 만든다.
 /// JSON(settings.json)에 그대로 직렬화된다.
 ///
-/// 애니메이션 옵션과 규칙은 세트를 따라간다: <see cref="SetProfiles"/>에 기본 세트의 프로필이 있으면 그것이,
-/// 없으면 공통 값(<see cref="Animation"/>, <see cref="Rules"/>)이 적용된다(<see cref="EffectiveAnimation"/>, <see cref="EffectiveRules"/>).
+/// 앱 공통 설정은 창·입력·자동 시작 같은 기본 기능뿐이고, 애니메이션 옵션과 키 매핑 규칙은 모두 이미지 세트에 귀속된다
+/// (<see cref="SetProfiles"/>: 세트 이름 → 프로필). 지금 사용 중인 세트(<see cref="DefaultFrameSet"/>)의 프로필이
+/// 적용된다(<see cref="EffectiveAnimation"/>, <see cref="EffectiveRules"/>).
 /// </summary>
 public sealed record AppSettings
 {
-    public const int CurrentVersion = 1;
-    public const string BuiltInDefaultSet = "idle";
+    /// <summary>v2: 공통 Animation/Rules 제거, 규칙이 다른 세트를 가리키지 않고 자기 세트의 프레임만 다룬다.</summary>
+    public const int CurrentVersion = 2;
 
-    public static IReadOnlyList<KeyRule> DefaultRules { get; } = new[]
+    /// <summary>앱에 내장된 유일한 샘플 세트.</summary>
+    public const string ExampleSetName = "예시";
+
+    public const string BuiltInDefaultSet = ExampleSetName;
+
+    /// <summary>예시 세트의 기본 규칙: Enter를 누르면 2번 프레임(점프)을 0.8초간 보여준다.</summary>
+    public static IReadOnlyList<KeyRule> ExampleRules { get; } = new[]
     {
-        new KeyRule("Enter", "jump", HoldMs: 800, ResetIndex: true),
-        new KeyRule("*", "typing", HoldMs: 600, ResetIndex: false),
+        new KeyRule("Enter", HoldMs: 800, ResetIndex: true, FrameIndex: 1),
     };
+
+    private static readonly AnimationOptions DefaultAnimation = new();
 
     public int Version { get; init; } = CurrentVersion;
 
     public bool IsTopmost { get; init; } = true;
 
     public WindowSettings Window { get; init; } = new();
-
-    public AnimationOptions Animation { get; init; } = new();
 
     /// <summary>키를 길게 눌러 발생하는 반복 입력도 타수·규칙에 반영할지.</summary>
     public bool CountAutoRepeat { get; init; }
@@ -105,9 +111,8 @@ public sealed record AppSettings
 
     public IReadOnlyList<FrameSetSettings> FrameSets { get; init; } = Array.Empty<FrameSetSettings>();
 
+    /// <summary>지금 사용 중인 세트. 애니메이션과 키 매핑은 이 세트의 프로필을 따른다.</summary>
     public string DefaultFrameSet { get; init; } = BuiltInDefaultSet;
-
-    public IReadOnlyList<KeyRule> Rules { get; init; } = DefaultRules;
 
     /// <summary>세트 이름 → 프로필. 이름 비교는 대소문자를 구분하지 않는다(Normalized가 보장).</summary>
     public IReadOnlyDictionary<string, SetProfile> SetProfiles { get; init; } = EmptyProfiles;
@@ -117,43 +122,41 @@ public sealed record AppSettings
 
     public static AppSettings Default => new();
 
-    // ── 세트를 따라가는 유효 설정 ──
+    public static bool IsExampleSet(string? setName) =>
+        string.Equals(setName, ExampleSetName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>프로필에 규칙이 없을 때 쓰는 세트 기본 규칙. 예시 세트만 샘플 규칙을 갖고, 나머지 세트는 규칙 없이 시작한다.</summary>
+    public static IReadOnlyList<KeyRule> DefaultRulesFor(string setName) =>
+        IsExampleSet(setName) ? ExampleRules : Array.Empty<KeyRule>();
+
+    // ── 세트에 귀속된 설정 ──
 
     public SetProfile? ProfileOf(string setName) =>
         SetProfiles.TryGetValue(setName, out var profile) ? profile : null;
 
-    /// <summary>현재 기본 세트에 적용되는 애니메이션 옵션.</summary>
-    public AnimationOptions EffectiveAnimation => ProfileOf(DefaultFrameSet)?.Animation ?? Animation;
+    public AnimationOptions AnimationOf(string setName) => ProfileOf(setName)?.Animation ?? DefaultAnimation;
 
-    /// <summary>현재 기본 세트에 적용되는 키 매핑 규칙.</summary>
-    public IReadOnlyList<KeyRule> EffectiveRules => ProfileOf(DefaultFrameSet)?.Rules ?? Rules;
+    public IReadOnlyList<KeyRule> RulesOf(string setName) => ProfileOf(setName)?.Rules ?? DefaultRulesFor(setName);
 
-    /// <summary>현재 기본 세트의 프로필에 애니메이션 옵션을 기록한다(프로필이 없으면 현재 유효값으로 만든 뒤 기록).</summary>
+    /// <summary>사용 중인 세트에 적용되는 애니메이션 옵션.</summary>
+    public AnimationOptions EffectiveAnimation => AnimationOf(DefaultFrameSet);
+
+    /// <summary>사용 중인 세트에 적용되는 키 매핑 규칙.</summary>
+    public IReadOnlyList<KeyRule> EffectiveRules => RulesOf(DefaultFrameSet);
+
+    /// <summary>사용 중인 세트의 프로필에 애니메이션 옵션을 기록한다.</summary>
     public AppSettings WithEffectiveAnimation(AnimationOptions animation) =>
         WithProfile(DefaultFrameSet, p => p with { Animation = animation });
 
-    /// <summary>현재 기본 세트의 프로필에 규칙을 기록한다.</summary>
+    /// <summary>사용 중인 세트의 프로필에 규칙을 기록한다.</summary>
     public AppSettings WithEffectiveRules(IReadOnlyList<KeyRule> rules) =>
         WithProfile(DefaultFrameSet, p => p with { Rules = rules });
 
     /// <summary>
-    /// 기본 세트를 바꾼다. 새 세트에 프로필이 없으면 지금 적용 중인 설정을 복사해 시작하므로
-    /// 세트를 바꿔도 설정이 갑자기 초기화되지 않는다.
+    /// 세트 이름이 바뀌면 프로필과 사용 중인 세트 참조도 따라가게 한다.
+    /// 새 이름에 이미 프로필이 있으면(예: 예시 세트를 대체하는 이름) 덮어쓰지 않는다. 설정은 이름에 귀속되므로
+    /// 그 세트는 그 이름의 기존 설정을 이어받고, 옛 이름의 프로필은 버린다.
     /// </summary>
-    public AppSettings WithDefaultFrameSet(string setName)
-    {
-        if (string.IsNullOrWhiteSpace(setName))
-        {
-            return this;
-        }
-
-        var next = this with { DefaultFrameSet = setName };
-        return ProfileOf(setName) is null
-            ? next.WithProfile(setName, _ => new SetProfile(EffectiveAnimation, EffectiveRules))
-            : next;
-    }
-
-    /// <summary>세트 이름이 바뀌면 프로필과 기본 세트 참조도 따라가게 한다.</summary>
     public AppSettings WithSetRenamed(string oldName, string newName)
     {
         if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)
@@ -165,7 +168,7 @@ public sealed record AppSettings
         var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase);
         if (profiles.Remove(oldName, out var moved))
         {
-            profiles[newName] = moved;
+            profiles.TryAdd(newName, moved);
         }
 
         return this with
@@ -175,9 +178,29 @@ public sealed record AppSettings
         };
     }
 
+    /// <summary>
+    /// 세트가 삭제되면 그 세트의 프로필도 함께 지운다. 사용 중인 세트였다면 예시 세트로 돌아간다.
+    /// 예시 세트는 내장 세트로 계속 존재하므로 같은 이름의 사용자 세트를 지워도 프로필은 남긴다.
+    /// </summary>
+    public AppSettings WithSetRemoved(string setName)
+    {
+        if (string.IsNullOrWhiteSpace(setName) || IsExampleSet(setName))
+        {
+            return this;
+        }
+
+        var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase);
+        profiles.Remove(setName);
+        return this with
+        {
+            SetProfiles = profiles,
+            DefaultFrameSet = string.Equals(DefaultFrameSet, setName, StringComparison.OrdinalIgnoreCase) ? BuiltInDefaultSet : DefaultFrameSet,
+        };
+    }
+
     private AppSettings WithProfile(string setName, Func<SetProfile, SetProfile> mutate)
     {
-        var current = ProfileOf(setName) ?? new SetProfile(EffectiveAnimation, EffectiveRules);
+        var current = ProfileOf(setName) ?? new SetProfile();
         var profiles = new Dictionary<string, SetProfile>(SetProfiles, StringComparer.OrdinalIgnoreCase)
         {
             [setName] = mutate(current),
@@ -190,7 +213,6 @@ public sealed record AppSettings
     {
         Version = CurrentVersion,
         Window = (Window ?? new WindowSettings()).Normalized(),
-        Animation = (Animation ?? new AnimationOptions()).Normalized(),
         DefaultFrameSet = string.IsNullOrWhiteSpace(DefaultFrameSet) ? BuiltInDefaultSet : DefaultFrameSet.Trim(),
         FrameSets = (FrameSets ?? Array.Empty<FrameSetSettings>())
             .Where(f => f is not null && !string.IsNullOrWhiteSpace(f.Name) && !string.IsNullOrWhiteSpace(f.Folder))
@@ -201,20 +223,18 @@ public sealed record AppSettings
                 CleanNames(f.AnimationFrames),
                 string.IsNullOrWhiteSpace(f.IdleFrame) ? null : f.IdleFrame.Trim()))
             .ToList(),
-        Rules = CleanRules(Rules),
         SetProfiles = CleanProfiles(SetProfiles),
     };
 
     private static List<string>? CleanNames(IReadOnlyList<string>? names) =>
         names?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList();
 
-    private static List<KeyRule> CleanRules(IReadOnlyList<KeyRule>? rules) =>
-        (rules ?? Array.Empty<KeyRule>())
-            .Where(r => r is not null && !string.IsNullOrWhiteSpace(r.FrameSet))
+    private static List<KeyRule> CleanRules(IReadOnlyList<KeyRule> rules) =>
+        rules
+            .Where(r => r is not null)
             .Select(r => r with
             {
                 Keys = (r.Keys ?? Array.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).ToList(),
-                FrameSet = r.FrameSet.Trim(),
                 HoldMs = Math.Max(0, r.HoldMs),
                 FrameIndex = r.FrameIndex is < 0 ? null : r.FrameIndex,
             })
@@ -268,7 +288,7 @@ public sealed record AppSettings
         {
             var x = a[i];
             var y = b[i];
-            if (x.FrameSet != y.FrameSet || x.HoldMs != y.HoldMs || x.ResetIndex != y.ResetIndex
+            if (x.HoldMs != y.HoldMs || x.ResetIndex != y.ResetIndex
                 || x.FrameIndex != y.FrameIndex || !x.Keys.SequenceEqual(y.Keys))
             {
                 return false;

@@ -7,72 +7,63 @@ namespace KeyboardPet.Core.Tests.Settings;
 public class SetProfileTests
 {
     [Fact]
-    public void WithoutProfile_EffectiveValuesAreGlobal()
+    public void WithoutProfile_UsesSetDefaults()
     {
-        var s = new AppSettings { DefaultFrameSet = "cat", Animation = new AnimationOptions { Mode = FrameMode.Random } };
+        var cat = new AppSettings { DefaultFrameSet = "cat" };
+        var example = new AppSettings { DefaultFrameSet = AppSettings.ExampleSetName };
 
-        Assert.Equal(FrameMode.Random, s.EffectiveAnimation.Mode);
-        Assert.Same(s.Rules, s.EffectiveRules);
-        Assert.Null(s.ProfileOf("cat"));
+        Assert.Equal(new AnimationOptions(), cat.EffectiveAnimation);
+        Assert.Empty(cat.EffectiveRules);                                       // 사용자 세트는 규칙 없이 시작
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, example.EffectiveRules));
+        Assert.Null(cat.ProfileOf("cat"));
     }
 
     [Fact]
-    public void WithEffectiveAnimation_CreatesProfileForDefaultSet_FromCurrentEffectiveValues()
-    {
-        var s = new AppSettings { DefaultFrameSet = "cat", Animation = new AnimationOptions { Mode = FrameMode.Fixed, FixedIntervalMs = 333 } };
-
-        var next = s.WithEffectiveAnimation(s.EffectiveAnimation with { Mode = FrameMode.Adaptive });
-
-        Assert.Equal(FrameMode.Adaptive, next.EffectiveAnimation.Mode);
-        Assert.Equal(333, next.EffectiveAnimation.FixedIntervalMs);   // 나머지 값은 유지
-        Assert.Equal(FrameMode.Fixed, next.Animation.Mode);             // 공통 값은 그대로
-        Assert.NotNull(next.ProfileOf("cat"));
-        Assert.True(AppSettings.RulesEqual(s.Rules, next.ProfileOf("cat")!.Rules!)); // 규칙은 현재 유효값 복사
-    }
-
-    [Fact]
-    public void WithEffectiveRules_WritesOnlyToDefaultSetProfile()
+    public void WithEffectiveAnimation_CreatesProfileForCurrentSet_WithoutTouchingRules()
     {
         var s = new AppSettings { DefaultFrameSet = "cat" };
-        var rules = new[] { new KeyRule("Space", "cat", HoldMs: 100) };
+
+        var next = s.WithEffectiveAnimation(s.EffectiveAnimation with { Mode = FrameMode.Fixed, FixedIntervalMs = 333 });
+
+        Assert.Equal(FrameMode.Fixed, next.EffectiveAnimation.Mode);
+        Assert.Equal(333, next.EffectiveAnimation.FixedIntervalMs);
+        Assert.NotNull(next.ProfileOf("cat"));
+        Assert.Null(next.ProfileOf("cat")!.Rules);                               // 규칙은 세트 기본값 유지
+        Assert.Equal(new AnimationOptions(), next.AnimationOf("dog"));          // 다른 세트에는 영향 없음
+    }
+
+    [Fact]
+    public void WithEffectiveRules_WritesOnlyToCurrentSet()
+    {
+        var s = new AppSettings { DefaultFrameSet = "cat" };
+        var rules = new[] { new KeyRule("Space", HoldMs: 100, FrameIndex: 2) };
 
         var next = s.WithEffectiveRules(rules);
 
         Assert.True(AppSettings.RulesEqual(rules, next.EffectiveRules));
-        Assert.True(AppSettings.RulesEqual(AppSettings.DefaultRules, next.Rules));
-        Assert.True(AppSettings.RulesEqual(AppSettings.DefaultRules, (next with { DefaultFrameSet = "dog" }).EffectiveRules));
+        Assert.Empty(next.RulesOf("dog"));
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, next.RulesOf(AppSettings.ExampleSetName)));
     }
 
     [Fact]
-    public void WithDefaultFrameSet_CopiesCurrentSettingsToSetWithoutProfile()
-    {
-        var s = new AppSettings { DefaultFrameSet = "cat" }
-            .WithEffectiveAnimation(new AnimationOptions { Mode = FrameMode.Random, RandomMinMs = 50, RandomMaxMs = 80 });
-
-        var next = s.WithDefaultFrameSet("dog");
-
-        Assert.Equal("dog", next.DefaultFrameSet);
-        Assert.Equal(FrameMode.Random, next.EffectiveAnimation.Mode);
-        Assert.NotNull(next.ProfileOf("dog"));
-        Assert.NotNull(next.ProfileOf("cat"));
-    }
-
-    [Fact]
-    public void WithDefaultFrameSet_KeepsExistingProfile()
+    public void SwitchingSet_SwitchesAnimationAndRules_Independently()
     {
         var s = new AppSettings { DefaultFrameSet = "cat" }
             .WithEffectiveAnimation(new AnimationOptions { Mode = FrameMode.Random })
-            .WithDefaultFrameSet("dog")
-            .WithEffectiveAnimation(new AnimationOptions { Mode = FrameMode.Fixed });
+            .WithEffectiveRules(new[] { new KeyRule("A", FrameIndex: 0) });
 
-        var back = s.WithDefaultFrameSet("cat");
+        var dog = s with { DefaultFrameSet = "dog" };
+        var back = dog.WithEffectiveAnimation(new AnimationOptions { Mode = FrameMode.Fixed }) with { DefaultFrameSet = "cat" };
 
-        Assert.Equal(FrameMode.Random, back.EffectiveAnimation.Mode);
-        Assert.Equal(FrameMode.Fixed, back.WithDefaultFrameSet("dog").EffectiveAnimation.Mode);
+        Assert.Equal(new AnimationOptions().Mode, dog.EffectiveAnimation.Mode);  // 새 세트는 자기 기본값
+        Assert.Empty(dog.EffectiveRules);
+        Assert.Equal(FrameMode.Random, back.EffectiveAnimation.Mode);            // 돌아오면 자기 설정
+        Assert.Single(back.EffectiveRules);
+        Assert.Equal(FrameMode.Fixed, back.AnimationOf("dog").Mode);
     }
 
     [Fact]
-    public void WithSetRenamed_MovesProfile_AndDefaultReference()
+    public void WithSetRenamed_MovesProfile_AndCurrentReference()
     {
         var s = new AppSettings { DefaultFrameSet = "cat" }
             .WithEffectiveAnimation(new AnimationOptions { Mode = FrameMode.Adaptive });
@@ -86,6 +77,43 @@ public class SetProfileTests
     }
 
     [Fact]
+    public void WithSetRenamed_ToNameWithProfile_DoesNotOverwriteIt()
+    {
+        var s = new AppSettings()
+            .WithEffectiveRules(new[] { new KeyRule("E", FrameIndex: 1) })           // 예시 세트의 설정
+            with { DefaultFrameSet = "cat" };
+        s = s.WithEffectiveRules(new[] { new KeyRule("C") });
+
+        var renamed = s.WithSetRenamed("cat", AppSettings.ExampleSetName);
+
+        Assert.Equal(AppSettings.ExampleSetName, renamed.DefaultFrameSet);
+        Assert.Equal(new[] { "E" }, renamed.EffectiveRules[0].Keys);                // 기존 설정 유지
+        Assert.Null(renamed.ProfileOf("cat"));
+    }
+
+    [Fact]
+    public void WithSetRemoved_DropsProfile_AndFallsBackToExample()
+    {
+        var s = new AppSettings { DefaultFrameSet = "cat" }
+            .WithEffectiveRules(new[] { new KeyRule("A") });
+
+        var removed = s.WithSetRemoved("CAT");
+
+        Assert.Null(removed.ProfileOf("cat"));
+        Assert.Equal(AppSettings.ExampleSetName, removed.DefaultFrameSet);
+        Assert.Empty((removed with { DefaultFrameSet = "cat" }).EffectiveRules);   // 같은 이름으로 다시 만들어도 새로 시작
+    }
+
+    [Fact]
+    public void WithSetRemoved_KeepsExampleProfile_AndOtherCurrentSet()
+    {
+        var s = new AppSettings().WithEffectiveRules(new[] { new KeyRule("B") }) with { DefaultFrameSet = "dog" };
+
+        Assert.Same(s, s.WithSetRemoved(AppSettings.ExampleSetName));
+        Assert.Equal("dog", s.WithSetRemoved("cat").DefaultFrameSet);
+    }
+
+    [Fact]
     public void ProfileLookup_IsCaseInsensitive_AfterNormalize()
     {
         var s = new AppSettings
@@ -95,7 +123,7 @@ public class SetProfileTests
         }.Normalized();
 
         Assert.Equal(FrameMode.Random, s.EffectiveAnimation.Mode);
-        Assert.Same(s.Rules, s.EffectiveRules);   // 프로필의 Rules가 null이면 공통 규칙
+        Assert.Empty(s.EffectiveRules);   // 프로필의 Rules가 null이면 세트 기본 규칙
     }
 
     [Fact]

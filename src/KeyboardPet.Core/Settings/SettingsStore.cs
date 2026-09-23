@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace KeyboardPet.Core.Settings;
@@ -16,6 +17,16 @@ public sealed class SettingsStore
         AllowTrailingCommas = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter() },
+    };
+
+    // 역직렬화(JsonOptions)와 같은 관대함으로 읽는다: 대소문자 무시, 주석·후행 쉼표 허용.
+    // JsonDocument 단계에서는 빈 파일도 JsonException이 된다.
+    private static readonly JsonNodeOptions NodeOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
     };
 
     public SettingsStore(string filePath)
@@ -43,21 +54,31 @@ public sealed class SettingsStore
 
         try
         {
-            var json = File.ReadAllText(FilePath);
-            var loaded = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
-            if (loaded is null)
-            {
-                throw new JsonException("설정 파일이 비어 있습니다.");
-            }
+            // 한 번만 파싱한다. 현재 버전 파일은 문서에서 바로 역직렬화하고(중복 속성 등에 관대),
+            // 옛 버전 파일만 JSON 트리로 바꿔 변환한 뒤 역직렬화한다.
+            using var document = JsonDocument.Parse(File.ReadAllText(FilePath), DocumentOptions);
+            var loaded = SettingsMigration.NeedsMigration(document.RootElement)
+                ? MigrateAndDeserialize(document.RootElement)
+                : document.Deserialize<AppSettings>(JsonOptions);
 
-            return Migrate(loaded).Normalized();
+            return (loaded ?? throw new JsonException("설정 파일이 비어 있습니다.")).Normalized();
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+        // ArgumentException: 옛 버전 파일을 JSON 트리로 읽을 때 속성 이름이 중복된 경우(직접 편집한 파일).
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException
+                                       or ArgumentException)
         {
             LastLoadError = ex.Message;
             TryQuarantineCorruptFile();
             return AppSettings.Default;
         }
+    }
+
+    private static AppSettings? MigrateAndDeserialize(JsonElement element)
+    {
+        var root = JsonObject.Create(element, NodeOptions)
+                   ?? throw new JsonException("설정 파일이 객체가 아닙니다.");
+        SettingsMigration.Migrate(root);
+        return root.Deserialize<AppSettings>(JsonOptions);
     }
 
     public void Save(AppSettings settings)
@@ -78,14 +99,6 @@ public sealed class SettingsStore
         }
 
         File.Move(tempPath, FilePath, overwrite: true);
-    }
-
-    private static AppSettings Migrate(AppSettings loaded)
-    {
-        // 버전이 올라가면 여기서 단계별로 변환한다. v1이 최초 버전이므로 아직 변환 규칙은 없다.
-        return loaded.Version == AppSettings.CurrentVersion
-            ? loaded
-            : loaded with { Version = AppSettings.CurrentVersion };
     }
 
     private void TryQuarantineCorruptFile()

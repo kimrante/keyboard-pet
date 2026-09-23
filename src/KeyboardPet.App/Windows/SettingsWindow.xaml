@@ -84,6 +84,18 @@
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
 
+        <!-- 애니메이션·키 매핑 탭 상단: 편집 대상 세트 안내와 사용할 세트 선택 -->
+        <DataTemplate x:Key="ProfileBannerTemplate" DataType="{x:Type vm:SettingsViewModel}">
+            <Border Style="{StaticResource ProfileBanner}">
+                <DockPanel>
+                    <ComboBox DockPanel.Dock="Right" Width="180" Margin="12,0,0,0" VerticalAlignment="Center"
+                              ItemsSource="{Binding AvailableSetNames}" SelectedItem="{Binding DefaultFrameSet}"
+                              ToolTip="사용할 세트. 이 탭의 설정은 고른 세트에 저장됩니다" />
+                    <TextBlock Text="{Binding ProfileTargetText}" Foreground="#084298" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+
         <!-- card 형태의 목록 행 -->
         <Style x:Key="ItemCard" TargetType="Border">
             <Setter Property="BorderBrush" Value="#DEE2E6" />
@@ -172,8 +184,9 @@
                     <Button DockPanel.Dock="Left" Content="새 세트" Command="{Binding AddEmptySetCommand}" Margin="8,0,0,0"
                             ToolTip="빈 세트를 만듭니다. 앱 폴더에 세트 폴더가 생기며, 카드에 이미지를 끌어다 놓으면 그 폴더로 복사됩니다" />
                     <ComboBox DockPanel.Dock="Right" Width="180" ItemsSource="{Binding AvailableSetNames}"
-                              SelectedItem="{Binding DefaultFrameSet}" VerticalAlignment="Center" />
-                    <TextBlock DockPanel.Dock="Right" Text="기본 세트:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                              SelectedItem="{Binding DefaultFrameSet}" VerticalAlignment="Center"
+                              ToolTip="펫으로 표시할 세트. 애니메이션·키 매핑 설정은 세트마다 따로 저장됩니다" />
+                    <TextBlock DockPanel.Dock="Right" Text="사용할 세트:" VerticalAlignment="Center" Margin="0,0,8,0" />
                 </DockPanel>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -194,7 +207,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding Name}" ToolTip="세트 이름 (규칙에서 이 이름으로 참조)" Margin="0,0,6,0" />
+                                        <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding Name}" ToolTip="세트 이름 (애니메이션·키 매핑 설정이 이 이름에 저장됨)" Margin="0,0,6,0" />
                                         <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Folder}" ToolTip="이미지가 들어 있는 폴더" />
                                         <Button Grid.Row="0" Grid.Column="2" Content="찾아보기..." Style="{StaticResource SmallButton}"
                                                 Command="{Binding Owner.BrowseFrameSetFolderCommand}" CommandParameter="{Binding}" />
@@ -323,7 +336,7 @@
                     <TextBlock Text="{Binding StatusMessage}" Foreground="#0D6EFD" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4" />
                     <TextBlock Text="{Binding BuiltInSummary}" Foreground="#444" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource Hint}"
-                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 이미지 파일이나 폴더를 탭에 끌어다 놓으면 세트가 추가되고, 세트 카드 위에 놓으면 그 세트에 프레임이 추가됩니다. 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 타일의 체크를 풀면 그 프레임은 루프 애니메이션에서 빠지고 키 매핑의 프레임 선택에서만 쓰입니다(키 전용). '무입력 복귀 프레임'은 타이핑이 멈췄을 때 보여줄 프레임입니다. 편집한 내용은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 내장 세트 idle, jump, typing과 같은 이름으로 추가하면 내장 세트를 대체합니다." />
+                               Text="폴더 안의 PNG/JPG/BMP/GIF 파일이 파일명 순서대로 프레임이 됩니다(GIF는 프레임 단위로 풀립니다). 이미지 파일이나 폴더를 탭에 끌어다 놓으면 세트가 추가되고, 세트 카드 위에 놓으면 그 세트에 프레임이 추가됩니다. 타일을 드래그해 순서를 바꾸고 × 로 제외할 수 있으며, 타일의 체크를 풀면 그 프레임은 루프 애니메이션에서 빠지고 키 매핑의 프레임 선택에서만 쓰입니다(키 전용). '무입력 복귀 프레임'은 타이핑이 멈췄을 때 보여줄 프레임입니다. 편집한 내용은 저장됩니다(이후 폴더에 추가한 파일은 '폴더 순서로 되돌리기'로 반영). 애니메이션과 키 매핑 설정은 세트마다 따로 저장되어 세트를 바꾸면 함께 바뀝니다. 내장 '예시' 세트와 같은 이름으로 추가하면 예시 세트를 대체합니다." />
                 </StackPanel>
             </Grid>
         </TabItem>
@@ -332,9 +345,7 @@
         <TabItem Header="애니메이션">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="12">
-                    <Border Style="{StaticResource ProfileBanner}">
-                        <TextBlock Text="{Binding ProfileTargetText}" Foreground="#084298" TextWrapping="Wrap" />
-                    </Border>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ProfileBannerTemplate}" Focusable="False" />
 
                     <GroupBox Header="프레임 전환 방식">
                         <StackPanel>
@@ -481,13 +492,11 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Margin="0,0,0,8">
-                    <Border Style="{StaticResource ProfileBanner}">
-                        <TextBlock Text="{Binding ProfileTargetText}" Foreground="#084298" TextWrapping="Wrap" />
-                    </Border>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ProfileBannerTemplate}" Focusable="False" />
                     <DockPanel>
                         <Button DockPanel.Dock="Left" Content="규칙 추가" Style="{StaticResource BsPrimaryButton}" Command="{Binding AddRuleCommand}" Margin="0,0,12,0" />
                         <TextBlock Style="{StaticResource Hint}" Margin="0" VerticalAlignment="Center"
-                                   Text="위에서부터 먼저 맞는 규칙이 적용됩니다. 키는 쉼표로 여러 개 적을 수 있고, * 는 모든 키(조합키 단독 제외)입니다. 프레임을 고르면 그 키를 누를 때 해당 프레임 한 장만 유지 시간 동안 표시됩니다." />
+                                   Text="위에서부터 먼저 맞는 규칙이 적용됩니다. 키는 쉼표로 여러 개 적을 수 있고, * 는 모든 키(조합키 단독 제외)입니다. 프레임을 고르면 그 키를 누를 때 사용 중인 세트의 해당 프레임 한 장이 유지 시간 동안 표시되고, '애니메이션 재생'은 루프 애니메이션을 이어서(또는 처음부터) 재생합니다." />
                     </DockPanel>
                 </StackPanel>
 
@@ -540,12 +549,10 @@
                                         </Button>
 
                                         <TextBlock Grid.Column="3" Text="→" VerticalAlignment="Center" Margin="8,0,4,0" />
-                                        <ComboBox Grid.Column="4" Width="100" ItemsSource="{Binding Owner.AvailableSetNames}" SelectedItem="{Binding FrameSet}"
-                                                  ToolTip="전환할 이미지 세트" />
 
-                                        <!-- 프레임 선택: '전체 애니메이션' 또는 특정 프레임 한 장만 정지 표시 -->
-                                        <ComboBox Grid.Column="5" Width="176" Margin="4,0,0,0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
-                                                  ToolTip="세트 전체를 재생할지, 특정 프레임 한 장만 보여줄지">
+                                        <!-- 프레임 선택: 사용 중인 세트의 '애니메이션 재생' 또는 특정 프레임 한 장만 정지 표시 -->
+                                        <ComboBox Grid.Column="4" Grid.ColumnSpan="2" Width="200" Margin="0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
+                                                  ToolTip="루프 애니메이션을 재생할지, 사용 중인 세트의 특정 프레임 한 장만 보여줄지">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:FrameChoice}">
                                                     <StackPanel Orientation="Horizontal">
@@ -560,7 +567,7 @@
                                             <TextBox Text="{Binding HoldMs}" Width="80" TextAlignment="Right" ToolTip="유지 시간(ms). 0이면 다른 규칙이 맞을 때까지 유지" />
                                             <TextBlock Text="ms" VerticalAlignment="Center" Margin="3,0,8,0" />
                                             <CheckBox Content="처음부터" IsChecked="{Binding ResetIndex}" Margin="0" VerticalAlignment="Center"
-                                                      ToolTip="전환할 때 첫 프레임부터 다시 재생 (전체 애니메이션일 때만 의미 있음)" />
+                                                      ToolTip="키를 누를 때 애니메이션을 첫 프레임부터 다시 재생 ('애니메이션 재생'일 때만 의미 있음)" />
                                         </StackPanel>
 
                                         <Button Grid.Column="7" Content="삭제" Style="{StaticResource SmallDangerButton}" Margin="10,0,0,0"

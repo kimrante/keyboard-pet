@@ -43,6 +43,7 @@ public sealed class AnimationEngine : IDisposable
     /// </summary>
     public void SetActiveSet(FrameSet set, bool resetIndex = true, int? pinnedFrame = null)
     {
+        var wasPinned = IsPinned;
         ActiveSet = set;
 
         if (pinnedFrame is int pin && set.FrameCount > 0)
@@ -53,7 +54,10 @@ public sealed class AnimationEngine : IDisposable
         else
         {
             IsPinned = false;
-            FrameIndex = resetIndex || FrameIndex >= set.FrameCount ? set.FirstLoopIndex : FrameIndex;
+
+            // 고정 프레임이 루프 밖(키 전용)이었다면 이어서 재생할 자리가 없으므로 루프 처음으로 간다.
+            var keepIndex = !resetIndex && FrameIndex < set.FrameCount && (!wasPinned || set.IsInLoop(FrameIndex));
+            FrameIndex = keepIndex ? FrameIndex : set.FirstLoopIndex;
         }
 
         ActiveSetChanged?.Invoke(set);

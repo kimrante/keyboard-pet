@@ -27,7 +27,7 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.True(settings.IsTopmost);
         Assert.Equal(AppSettings.BuiltInDefaultSet, settings.DefaultFrameSet);
-        Assert.Equal(2, settings.Rules.Count);
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, settings.EffectiveRules));
         Assert.Null(store.LastLoadError);
         Assert.False(store.Exists);
     }
@@ -42,22 +42,22 @@ public sealed class SettingsStoreTests : IDisposable
             CountAutoRepeat = true,
             StartWithWindows = true,
             Window = new WindowSettings { X = 100.5, Y = 200, Scale = 1.5, Opacity = 0.8, ClickThrough = true, ShowCounter = false },
-            Animation = new AnimationOptions { Mode = FrameMode.Random, RandomMinMs = 50, RandomMaxMs = 900, KeysPerFrame = 3, IdleReturnMs = 1500, FixedIntervalMs = 333 },
             FrameSets = new[]
             {
                 new FrameSetSettings("cat", @"C:\pets\cat", new[] { "c.png", "a.png" }, AnimationFrames: new[] { "c.png" }, IdleFrame: "a.png"),
                 new FrameSetSettings("dog", @"C:\pets\dog"),
             },
             DefaultFrameSet = "cat",
-            Rules = new[]
-            {
-                new KeyRule(new[] { "Enter", "Ctrl+S" }, "dog", HoldMs: 500, ResetIndex: false),
-                new KeyRule("*", "cat", HoldMs: 0, ResetIndex: true),
-                new KeyRule("Space", "cat", HoldMs: 300, ResetIndex: true, FrameIndex: 1),
-            },
             SetProfiles = new Dictionary<string, SetProfile>
             {
-                ["cat"] = new(new AnimationOptions { Mode = FrameMode.Adaptive, AdaptiveFastMs = 40 }, new[] { new KeyRule("Tab", "dog", HoldMs: 250) }),
+                ["cat"] = new(
+                    new AnimationOptions { Mode = FrameMode.Random, RandomMinMs = 50, RandomMaxMs = 900, KeysPerFrame = 3, IdleReturnMs = 1500, FixedIntervalMs = 333 },
+                    new[]
+                    {
+                        new KeyRule(new[] { "Enter", "Ctrl+S" }, HoldMs: 500, ResetIndex: false),
+                        new KeyRule("*", HoldMs: 0, ResetIndex: true),
+                        new KeyRule("Space", HoldMs: 300, ResetIndex: true, FrameIndex: 1),
+                    }),
                 ["dog"] = new(null, null),
             },
         };
@@ -70,7 +70,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(original.CountAutoRepeat, loaded.CountAutoRepeat);
         Assert.Equal(original.StartWithWindows, loaded.StartWithWindows);
         Assert.Equal(original.Window, loaded.Window);
-        Assert.Equal(original.Animation, loaded.Animation);
         Assert.True(AppSettings.FrameSetsEqual(original.FrameSets, loaded.FrameSets));
         Assert.Equal(new[] { "c.png", "a.png" }, loaded.FrameSets[0].Frames);
         Assert.Equal(new[] { "c.png" }, loaded.FrameSets[0].AnimationFrames);
@@ -79,13 +78,13 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Null(loaded.FrameSets[1].AnimationFrames);
         Assert.Null(loaded.FrameSets[1].IdleFrame);
         Assert.Equal("cat", loaded.DefaultFrameSet);
-        Assert.True(AppSettings.RulesEqual(original.Rules, loaded.Rules));
-        Assert.Equal(1, loaded.Rules[2].FrameIndex);
-        Assert.Null(loaded.Rules[0].FrameIndex);
         Assert.True(AppSettings.ProfilesEqual(original.SetProfiles, loaded.SetProfiles));
-        Assert.Equal(FrameMode.Adaptive, loaded.EffectiveAnimation.Mode);      // 기본 세트 cat의 프로필
-        Assert.Equal("Tab", loaded.EffectiveRules[0].Keys[0]);
+        Assert.Equal(original.EffectiveAnimation, loaded.EffectiveAnimation);   // 사용 중인 세트 cat의 프로필
+        Assert.Equal(1, loaded.EffectiveRules[2].FrameIndex);
+        Assert.Null(loaded.EffectiveRules[0].FrameIndex);
         Assert.Null(loaded.ProfileOf("dog")!.Animation);
+        Assert.Null(loaded.ProfileOf("dog")!.Rules);
+        Assert.Equal(AppSettings.CurrentVersion, loaded.Version);
     }
 
     [Fact]
@@ -94,15 +93,17 @@ public sealed class SettingsStoreTests : IDisposable
         Directory.CreateDirectory(_dir);
         File.WriteAllText(FilePath, """
             {
+              "version": 2,
+              "defaultFrameSet": "cat",
               "frameSets": [ { "name": "cat", "folder": "C:\\c", "frames": [ " a.png ", "", "b.png" ] } ],
-              "rules": [ { "keys": ["A"], "frameSet": "cat", "frameIndex": -1 } ]
+              "setProfiles": { "cat": { "rules": [ { "keys": ["A"], "frameIndex": -1 } ] } }
             }
             """);
 
         var s = new SettingsStore(FilePath).Load();
 
         Assert.Equal(new[] { "a.png", "b.png" }, s.FrameSets[0].Frames);
-        Assert.Null(s.Rules[0].FrameIndex);
+        Assert.Null(s.EffectiveRules[0].FrameIndex);
     }
 
     [Fact]
@@ -153,10 +154,10 @@ public sealed class SettingsStoreTests : IDisposable
         File.WriteAllText(FilePath, """
             {
               // 주석
-              "version": 1,
+              "version": 2,
               "isTopmost": false,
               "someFutureField": { "x": 1 },
-              "animation": { "mode": "Keystroke", "keysPerFrame": 2, },
+              "setProfiles": { "예시": { "animation": { "mode": "Keystroke", "keysPerFrame": 2, }, }, },
             }
             """);
         var store = new SettingsStore(FilePath);
@@ -165,8 +166,8 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.Null(store.LastLoadError);
         Assert.False(settings.IsTopmost);
-        Assert.Equal(FrameMode.Keystroke, settings.Animation.Mode);
-        Assert.Equal(2, settings.Animation.KeysPerFrame);
+        Assert.Equal(FrameMode.Keystroke, settings.EffectiveAnimation.Mode);
+        Assert.Equal(2, settings.EffectiveAnimation.KeysPerFrame);
     }
 
     [Fact]
@@ -175,11 +176,17 @@ public sealed class SettingsStoreTests : IDisposable
         Directory.CreateDirectory(_dir);
         File.WriteAllText(FilePath, """
             {
+              "version": 2,
               "window": { "scale": 99, "opacity": -1 },
-              "animation": { "fixedIntervalMs": 1, "randomMinMs": 800, "randomMaxMs": 100, "keysPerFrame": 0 },
               "defaultFrameSet": "   ",
               "frameSets": [ { "name": "", "folder": "C:\\x" }, { "name": "ok", "folder": " C:\\y " } ],
-              "rules": [ { "keys": [ " Enter ", "" ], "frameSet": " jump ", "holdMs": -10 }, { "keys": ["A"], "frameSet": "" } ]
+              "setProfiles": {
+                " 예시 ": {
+                  "animation": { "fixedIntervalMs": 1, "randomMinMs": 800, "randomMaxMs": 100, "keysPerFrame": 0 },
+                  "rules": [ { "keys": [ " Enter ", "" ], "holdMs": -10 }, null ]
+                },
+                "  ": { "rules": [] }
+              }
             }
             """);
         var store = new SettingsStore(FilePath);
@@ -188,32 +195,45 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.Equal(WindowSettings.MaxScale, s.Window.Scale);
         Assert.Equal(WindowSettings.MinOpacity, s.Window.Opacity);
-        Assert.Equal(AnimationOptions.MinIntervalMs, s.Animation.FixedIntervalMs);
-        Assert.Equal(100, s.Animation.RandomMinMs);
-        Assert.Equal(800, s.Animation.RandomMaxMs);
-        Assert.Equal(1, s.Animation.KeysPerFrame);
         Assert.Equal(AppSettings.BuiltInDefaultSet, s.DefaultFrameSet);
+        Assert.Equal(AnimationOptions.MinIntervalMs, s.EffectiveAnimation.FixedIntervalMs);
+        Assert.Equal(100, s.EffectiveAnimation.RandomMinMs);
+        Assert.Equal(800, s.EffectiveAnimation.RandomMaxMs);
+        Assert.Equal(1, s.EffectiveAnimation.KeysPerFrame);
         Assert.Single(s.FrameSets);
         Assert.Equal(new FrameSetSettings("ok", @"C:\y"), s.FrameSets[0]);
-        Assert.Single(s.Rules);
-        Assert.Equal(new[] { "Enter" }, s.Rules[0].Keys);
-        Assert.Equal("jump", s.Rules[0].FrameSet);
-        Assert.Equal(0, s.Rules[0].HoldMs);
+        Assert.Single(s.SetProfiles);
+        Assert.Single(s.EffectiveRules);
+        Assert.Equal(new[] { "Enter" }, s.EffectiveRules[0].Keys);
+        Assert.Equal(0, s.EffectiveRules[0].HoldMs);
     }
 
     [Fact]
     public void Load_MissingSections_UsesDefaults()
     {
         Directory.CreateDirectory(_dir);
-        File.WriteAllText(FilePath, """{ "version": 1 }""");
+        File.WriteAllText(FilePath, """{ "version": 2 }""");
         var store = new SettingsStore(FilePath);
 
         var s = store.Load();
 
         Assert.Null(store.LastLoadError);
         Assert.NotNull(s.Window);
-        Assert.NotNull(s.Animation);
-        Assert.Equal(2, s.Rules.Count);
+        Assert.NotNull(s.EffectiveAnimation);
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, s.EffectiveRules));
+    }
+
+    [Fact]
+    public void Load_JsonArrayRoot_IsTreatedAsCorrupt()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, "[1, 2]");
+        var store = new SettingsStore(FilePath);
+
+        var settings = store.Load();
+
+        Assert.NotNull(store.LastLoadError);
+        Assert.Equal(AppSettings.BuiltInDefaultSet, settings.DefaultFrameSet);
     }
 
     [Fact]
