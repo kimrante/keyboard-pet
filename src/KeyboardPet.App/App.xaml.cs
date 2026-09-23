@@ -103,16 +103,6 @@ public partial class App : Application
         var settings = _services.GetRequiredService<SettingsService>();
         RunStep("설정 읽기", () => settings.Load(), fatal: false);
 
-        var tray = _services.GetRequiredService<TrayService>();
-        if (HasArg("--no-tray"))
-        {
-            DiagnosticsLog.Trace("--no-tray: 트레이 아이콘 생략");
-        }
-        else
-        {
-            RunStep("트레이 아이콘", () => tray.Show(), fatal: false);
-        }
-
         if (!RunStep("애니메이션 초기화", () => _services.GetRequiredService<AnimationService>().Initialize(), fatal: true)
             || !RunStep("효과 초기화", () => _services.GetRequiredService<EffectService>().Initialize(), fatal: true)
             || !RunStep("펫 창 표시", () => _services.GetRequiredService<PetWindow>().Show(), fatal: true))
@@ -130,15 +120,9 @@ public partial class App : Application
                 userMessage: "키보드 입력 감지를 시작하지 못했습니다. 펫은 표시되지만 타이핑에 반응하지 않습니다.\n앱을 다시 실행해 보세요.");
         }
 
-        RunStep("자동 실행 설정", () => _services.GetRequiredService<StartupService>().Apply(), fatal: false);
-        DiagnosticsLog.Trace("시작 완료");
-
-        if (settings.LastLoadError is not null)
-        {
-            ShowMessage(
-                "설정 파일이 손상되어 기본값으로 시작합니다.\n손상된 파일은 설정 폴더에 .corrupt-* 이름으로 보관됩니다.",
-                "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
+        // 펫이 먼저 보이도록, 첫 화면을 그리는 데 필요 없는 일(트레이 아이콘, 자동 실행 레지스트리, 안내 메시지)은
+        // 첫 프레임이 그려진 뒤로 미룬다. OnStartup이 끝나야 메시지 루프가 돌아 창이 실제로 그려진다.
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, FinishStartup);
 
         if (ScreenshotDirectory is { } screenshotDir)
         {
@@ -156,10 +140,40 @@ public partial class App : Application
                     Shutdown(1);
                 }
             }, DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    /// <summary>첫 화면이 그려진 뒤 이어지는 시작 단계.</summary>
+    private void FinishStartup()
+    {
+        if (_services is null)
+        {
             return;
         }
 
-        if (!tray.IsCreated)
+        var tray = _services.GetRequiredService<TrayService>();
+        var noTray = HasArg("--no-tray");
+        if (noTray)
+        {
+            DiagnosticsLog.Trace("--no-tray: 트레이 아이콘 생략");
+        }
+        else
+        {
+            RunStep("트레이 아이콘", () => tray.Show(), fatal: false);
+        }
+
+        RunStep("자동 실행 설정", () => _services.GetRequiredService<StartupService>().Apply(), fatal: false);
+        DiagnosticsLog.Trace("시작 완료");
+
+        var settings = _services.GetRequiredService<SettingsService>();
+        if (settings.LastLoadError is not null)
+        {
+            ShowMessage(
+                "설정 파일이 손상되어 기본값으로 시작합니다.\n손상된 파일은 설정 폴더에 .corrupt-* 이름으로 보관됩니다.",
+                "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        if (!noTray && !tray.IsCreated)
         {
             ShowMessage(
                 "트레이 아이콘을 만들지 못해 트레이 없이 실행합니다.\n설정과 종료 메뉴는 펫 창을 마우스 오른쪽 버튼으로 눌러 열 수 있습니다.\n" +

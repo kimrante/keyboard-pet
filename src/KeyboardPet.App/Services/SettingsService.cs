@@ -116,34 +116,51 @@ public sealed class SettingsService : IDisposable
 
     private void SaveLoop()
     {
-        while (true)
+        try
         {
-            AppSettings snapshot;
-            lock (_gate)
+            while (true)
             {
-                if (_pending is null)
+                AppSettings snapshot;
+                lock (_gate)
                 {
-                    _saving = false;   // 진입 판단과 같은 잠금 안에서 종료를 결정하므로 스냅샷이 남지 않는다
-                    return;
+                    if (_pending is null)
+                    {
+                        return;   // 진입 판단과 같은 잠금 안에서 종료를 결정하므로 스냅샷이 남지 않는다(finally가 _saving을 내린다)
+                    }
+
+                    snapshot = _pending;
+                    _pending = null;
                 }
 
-                snapshot = _pending;
-                _pending = null;
-            }
+                string? error = null;
+                try
+                {
+                    _store.Save(snapshot);
+                }
+                catch (Exception ex)
+                {
+                    // 어떤 예외든 루프를 죽이지 않는다. 실패한 저장은 다음 변경이나 종료 시 다시 시도한다.
+                    error = ex.Message;
+                    DiagnosticsLog.Write("설정 저장 실패", ex);
+                }
 
-            string? error = null;
-            try
-            {
-                _store.Save(snapshot);
+                // 속성은 UI 스레드 소유. 종료 중이라 Dispatcher가 닫혔으면 조용히 버려진다.
+                _dispatcher.BeginInvoke(() =>
+                {
+                    LastSaveError = error;
+                    if (error is not null)
+                    {
+                        _dirty = true;
+                    }
+                });
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        }
+        finally
+        {
+            lock (_gate)
             {
-                error = ex.Message;
-                Debug.WriteLine($"[KeyboardPet] 설정 저장 실패: {ex.Message}");
+                _saving = false;
             }
-
-            // 속성은 UI 스레드 소유. 종료 중이라 Dispatcher가 닫혔으면 조용히 버려진다.
-            _dispatcher.BeginInvoke(() => LastSaveError = error);
         }
     }
 

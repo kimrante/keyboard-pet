@@ -38,7 +38,9 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
 
     // GC가 델리게이트를 수거하지 않도록 필드로 보관한다. 콜백마다 새 델리게이트를 만들지 않도록 전파용도 미리 만든다.
     private readonly HookProc _hookProc;
-    private readonly Action<KeyEvent> _raise;
+
+    // DispatcherOperationCallback은 Dispatcher가 리플렉션(DynamicInvoke) 없이 직접 호출하는 델리게이트 형식이다.
+    private readonly DispatcherOperationCallback _raise;
     private IntPtr _hookHandle;
     private bool _systemEventsSubscribed;
 
@@ -46,7 +48,11 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
     {
         _dispatcher = dispatcher;
         _hookProc = HookCallback;
-        _raise = keyEvent => KeyEvent?.Invoke(this, keyEvent);
+        _raise = state =>
+        {
+            KeyEvent?.Invoke(this, (KeyEvent)state!);
+            return null;
+        };
     }
 
     public event EventHandler<KeyEvent>? KeyEvent;

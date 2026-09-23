@@ -329,8 +329,15 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
         }
     }
 
-    /// <summary>세트가 다시 로드되거나 썸네일이 준비되면 비어 있는 썸네일을 캐시에서 채운다.</summary>
-    public void RefreshThumbnails() => FillThumbnailsFromCache();
+    /// <summary>
+    /// 세트가 다시 로드되거나 썸네일이 준비되면 비어 있는 썸네일을 캐시에서 채우고, 그 사이 캐시에서 빠진 파일
+    /// (사용 중인 세트가 바뀐 경우)은 디스크에서 읽는다(평소에는 할 일이 없어 곧바로 끝난다).
+    /// </summary>
+    public void RefreshThumbnails()
+    {
+        FillThumbnailsFromCache();
+        LoadThumbnailsAsync();
+    }
 
     /// <summary>캐시에 없는 파일(사용 중이 아닌 세트 등)만 백그라운드에서 축소 디코딩한 뒤 UI 스레드에 반영한다.</summary>
     private void LoadThumbnailsAsync()

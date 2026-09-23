@@ -80,11 +80,12 @@ public sealed class ImageCache
         var present = ListFolderFiles(folder);
         var presentSet = present.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var names = frames ?? present;
-        var existing = names.Where(presentSet.Contains).Take(MaxFramesPerSet).ToList();
+        var existingAll = names.Where(presentSet.Contains).ToList();
+        var existing = existingAll.Take(MaxFramesPerSet).ToList();
         var loop = animationFrames is null
             ? -1
             : existing.Count(n => animationFrames.Contains(n, StringComparer.OrdinalIgnoreCase));
-        return new FrameSetSummary(existing.Count, names.Count - existing.Count, loop);
+        return new FrameSetSummary(existing.Count, names.Count - existingAll.Count, loop);
     }
 
     /// <summary>새 로드 세대를 시작한다. 이후 EndGeneration까지 사용된 항목만 살아남는다.</summary>

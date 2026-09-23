@@ -77,7 +77,7 @@ public static class DiagnosticsLog
         }
         catch (IOException)
         {
-            var path = Path.Combine(Directory, $"startup-{Environment.ProcessId}.log");
+            var path = Path.Combine(Directory, "startup-2nd.log");   // 파일이 쌓이지 않도록 고정 이름
             return new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read));
         }
     }

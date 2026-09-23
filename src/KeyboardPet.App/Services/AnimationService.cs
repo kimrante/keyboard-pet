@@ -202,7 +202,7 @@ public sealed class AnimationService : IDisposable
             {
                 // 사용 중인 세트만 디코딩한다. 나머지는 폴더만 훑어 상태를 세고, 세트를 바꿀 때 그때 디코딩한다
                 // (세트가 여럿이어도 시작 시간·메모리는 사용 중인 세트 하나만큼만 든다).
-                if (!string.Equals(fs.Name, activeSet, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(fs.Name, activeSet, StringComparison.OrdinalIgnoreCase) && !BuiltInSets.ContainsKey(fs.Name))
                 {
                     var summary = ImageCache.Summarize(fs.Folder, fs.Frames, fs.AnimationFrames);
                     _statuses[fs.Name] = new FrameSetStatus(summary.FrameCount, false, null, summary.MissingCount, summary.LoopCount);
