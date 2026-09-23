@@ -391,8 +391,9 @@
                                                         Visibility="{Binding HasCustomFrames, Converter={StaticResource BoolToVis}}" />
 
                                                 <TextBlock Text="무입력 복귀 프레임:" FontSize="11.5" Margin="16,0,6,0" VerticalAlignment="Center" Foreground="#495057" />
-                                                <ComboBox Width="190" MinHeight="26" FontSize="12" ItemsSource="{Binding IdleFrameChoices}" SelectedItem="{Binding SelectedIdleFrame}"
+                                                <ComboBox ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" Width="190" MinHeight="26" FontSize="12" ItemsSource="{Binding IdleFrameChoices}" SelectedItem="{Binding SelectedIdleFrame}"
                                                           ToolTip="타수 기반·타이핑 속도 연동 모드에서 입력이 멈추면 보여줄 프레임입니다. 시작 직후에도 이 프레임으로 대기하며, 키 전용 프레임도 고를 수 있습니다.">
+                                            <ComboBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ComboBox.ItemsPanel>
                                                     <ComboBox.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type vm:IdleFrameChoice}">
                                                             <StackPanel Orientation="Horizontal">
@@ -673,8 +674,9 @@
                                         <TextBlock Grid.Column="3" Text="→" VerticalAlignment="Center" Margin="8,0,4,0" />
 
                                         <!-- 프레임 선택: 사용 중인 세트의 '애니메이션 재생' 또는 특정 프레임 한 장만 정지 표시 -->
-                                        <ComboBox Grid.Column="4" Grid.ColumnSpan="2" Width="200" Margin="0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
+                                        <ComboBox ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" Grid.Column="4" Grid.ColumnSpan="2" Width="200" Margin="0" ItemsSource="{Binding FrameChoices}" SelectedItem="{Binding SelectedFrame}"
                                                   ToolTip="루프 애니메이션을 재생할지, 사용 중인 세트의 특정 프레임 한 장만 보여줄지">
+                                            <ComboBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ComboBox.ItemsPanel>
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:FrameChoice}">
                                                     <StackPanel Orientation="Horizontal">

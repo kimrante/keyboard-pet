@@ -80,6 +80,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
         _settings.Changed += OnSettingsChanged;
         _animation.Reloaded += RefreshStatuses;
+        _animation.ThumbnailsReady += RefreshStatuses;
     }
 
     public ObservableCollection<FrameSetItemViewModel> FrameSets { get; } = new();
@@ -140,6 +141,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         StopCapture();
         _settings.Changed -= OnSettingsChanged;
         _animation.Reloaded -= RefreshStatuses;
+        _animation.ThumbnailsReady -= RefreshStatuses;
     }
 
     // ── 커밋 (항목 뷰모델이 호출) ──
@@ -201,6 +203,14 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     /// <summary>세트의 루프 프레임 인덱스. 전체가 루프면 null.</summary>
     public IReadOnlyList<int>? GetLoopFrames(string setName) => _animation.TryGetLoopFrames(setName);
+
+    /// <summary>세트 프레임의 썸네일(프레임과 같은 순서). 아직 준비 전이면 null.</summary>
+    public IReadOnlyList<System.Windows.Media.Imaging.BitmapSource>? GetThumbnails(string setName) => _animation.TryGetThumbnails(setName);
+
+    /// <summary>캐시된 파일의 썸네일(사용 중인 세트의 파일만). 없으면 null.</summary>
+    public System.Windows.Media.Imaging.BitmapSource? GetFileThumbnail(string path) => _animation.TryGetFileThumbnail(path);
+
+    public bool IsFileCached(string path) => _animation.IsFileCached(path);
 
     /// <summary>효과는 사용 중인 세트의 프로필에 저장된다.</summary>
     public void CommitEffects()
@@ -369,7 +379,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     private EffectItemViewModel CreateEffect(FrameEffect effect) =>
-        new(effect, Effects, CommitEffects, frames: () => GetFrames(CurrentSetName));
+        new(effect, Effects, CommitEffects, frames: () => (GetFrames(CurrentSetName).Count, GetThumbnails(CurrentSetName)));
 
     // ── 명령: 키 매핑 ──
 
@@ -602,6 +612,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         {
             _animation.SetStatuses.TryGetValue(item.Name, out var status);
             item.UpdateStatus(status);
+            item.RefreshThumbnails();
         }
 
         RuleErrorsText = string.Join(Environment.NewLine, _animation.RuleErrors);

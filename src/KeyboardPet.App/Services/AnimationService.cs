@@ -73,6 +73,12 @@ public sealed class AnimationService : IDisposable
     /// <summary>화면의 프레임이 바뀔 때 발생(프레임 번호).</summary>
     public event Action<int>? FrameChanged;
 
+    /// <summary>설정 창 미리보기용 썸네일이 만들어졌을 때 발생(UI 스레드).</summary>
+    public event Action? ThumbnailsReady;
+
+    /// <summary>펫 창이 숨겨졌거나 세션이 잠긴 동안 애니메이션을 멈춘다(아무도 보지 않는 화면을 그리지 않도록).</summary>
+    public bool IsPaused { get; private set; }
+
     /// <summary>지금 활성인 키 규칙(유지 시간 중). 없으면 null.</summary>
     public KeyRule? ActiveRule => _rules?.ActiveRule;
 
@@ -86,7 +92,10 @@ public sealed class AnimationService : IDisposable
 
         ReloadAll(_settings.Current);
         _engine.ApplyOptions(_settings.Current.EffectiveAnimation);
-        _engine.Start();
+        if (!IsPaused)
+        {
+            _engine.Start();
+        }
     }
 
     /// <summary>
@@ -109,6 +118,34 @@ public sealed class AnimationService : IDisposable
     /// <summary>로드된 세트의 루프 프레임 인덱스 목록. 전체가 루프면 null(세트가 없어도 null).</summary>
     public IReadOnlyList<int>? TryGetLoopFrames(string name) =>
         _sets.TryGetValue(name, out var set) ? set.Set.LoopFrames : null;
+
+    /// <summary>로드된 세트의 썸네일(프레임과 같은 순서). 아직 준비되지 않았으면 null(ThumbnailsReady 이후 다시 요청).</summary>
+    public IReadOnlyList<BitmapSource>? TryGetThumbnails(string name) =>
+        _sets.TryGetValue(name, out var set) ? _cache.TryGetThumbnails(set) : null;
+
+    /// <summary>캐시된 파일 하나의 썸네일. 사용 중인 세트의 파일만 캐시에 있다.</summary>
+    public BitmapSource? TryGetFileThumbnail(string path) => _cache.TryGetFileThumbnail(path);
+
+    /// <summary>파일이 디코딩 캐시에 있는지(있으면 썸네일은 ThumbnailsReady 뒤에 캐시에서 받는다).</summary>
+    public bool IsFileCached(string path) => _cache.IsCached(path);
+
+    public void SetPaused(bool paused)
+    {
+        if (IsPaused == paused)
+        {
+            return;
+        }
+
+        IsPaused = paused;
+        if (paused)
+        {
+            _engine.Stop();
+        }
+        else
+        {
+            _engine.Start();
+        }
+    }
 
     public void Dispose()
     {
@@ -144,14 +181,14 @@ public sealed class AnimationService : IDisposable
 
     private void ReloadAll(AppSettings s)
     {
-        LoadSets(s.FrameSets);
+        LoadSets(s.FrameSets, s.DefaultFrameSet);
         DefaultSetName = _sets.ContainsKey(s.DefaultFrameSet) ? s.DefaultFrameSet : AppSettings.BuiltInDefaultSet;
         ConfigureRules(s.EffectiveRules);
         ShowDefault();
         Reloaded?.Invoke();
     }
 
-    private void LoadSets(IReadOnlyList<FrameSetSettings> userSets)
+    private void LoadSets(IReadOnlyList<FrameSetSettings> userSets, string activeSet)
     {
         _sets.Clear();
         _statuses.Clear();
@@ -163,6 +200,15 @@ public sealed class AnimationService : IDisposable
         {
             try
             {
+                // 사용 중인 세트만 디코딩한다. 나머지는 폴더만 훑어 상태를 세고, 세트를 바꿀 때 그때 디코딩한다
+                // (세트가 여럿이어도 시작 시간·메모리는 사용 중인 세트 하나만큼만 든다).
+                if (!string.Equals(fs.Name, activeSet, StringComparison.OrdinalIgnoreCase))
+                {
+                    var summary = ImageCache.Summarize(fs.Folder, fs.Frames, fs.AnimationFrames);
+                    _statuses[fs.Name] = new FrameSetStatus(summary.FrameCount, false, null, summary.MissingCount, summary.LoopCount);
+                    continue;
+                }
+
                 var set = _cache.LoadFolder(fs.Name, fs.Folder, fs.Frames, fs.AnimationFrames, fs.IdleFrame);
                 var missing = set.MissingFiles?.Count ?? 0;
                 if (set.Set.IsEmpty)
@@ -194,6 +240,14 @@ public sealed class AnimationService : IDisposable
 
         // 이번 로드에서 쓰이지 않은 파일의 비트맵은 버려 메모리를 되돌린다.
         _cache.EndGeneration();
+
+        // 설정 창용 썸네일은 백그라운드에서 만든다(펫 표시에는 필요 없다).
+        var context = System.Threading.SynchronizationContext.Current;
+        _cache.BuildMissingThumbnailsAsync().ContinueWith(
+            _ => ThumbnailsReady?.Invoke(),
+            System.Threading.CancellationToken.None,
+            TaskContinuationOptions.OnlyOnRanToCompletion,
+            context is null ? TaskScheduler.Default : TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     private void ConfigureRules(IEnumerable<KeyRule> rules)

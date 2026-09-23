@@ -7,8 +7,8 @@ using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.App.ViewModels;
 
-/// <summary>규칙의 "프레임" 콤보박스 항목. Index가 null이면 세트의 루프 애니메이션.</summary>
-public sealed record FrameChoice(int? Index, string Label, ImageSource? Thumbnail)
+/// <summary>규칙의 "프레임" 콤보박스 항목. Index가 null이면 세트의 루프 애니메이션. Exists가 false면 세트에 없는 프레임(자리표시).</summary>
+public sealed record FrameChoice(int? Index, string Label, ImageSource? Thumbnail, bool Exists = true)
 {
     public static FrameChoice WholeSet { get; } = new(null, "애니메이션 재생", null);
 
@@ -94,19 +94,21 @@ public sealed partial class RuleItemViewModel : ObservableObject
         try
         {
             var setName = Owner.CurrentSetName;
-            var frames = Owner.GetFrames(setName);
+            var frameCount = Owner.GetFrames(setName).Count;
+            var thumbnails = Owner.GetThumbnails(setName);            // 20px 항목에 전체 해상도 프레임을 묶지 않는다(준비 전엔 null)
             var loop = Owner.GetLoopFrames(setName)?.ToHashSet();   // 프레임마다 Contains: 목록이면 O(n²)
             var choices = new List<FrameChoice> { FrameChoice.WholeSet };
-            for (var i = 0; i < frames.Count; i++)
+            for (var i = 0; i < frameCount; i++)
             {
                 var keyOnly = loop is not null && !loop.Contains(i);
-                choices.Add(new FrameChoice(i, keyOnly ? $"{i + 1}번 프레임 (키 전용)" : $"{i + 1}번 프레임", frames[i]));
+                var thumbnail = thumbnails is not null && i < thumbnails.Count ? thumbnails[i] : null;
+                choices.Add(new FrameChoice(i, keyOnly ? $"{i + 1}번 프레임 (키 전용)" : $"{i + 1}번 프레임", thumbnail));
             }
 
             // 세트가 아직 로드되지 않았거나 프레임이 줄었어도 저장된 선택을 잃지 않도록 자리표시 항목을 하나 둔다.
-            if (keepIndex is int k && k >= frames.Count)
+            if (keepIndex is int k && k >= frameCount)
             {
-                choices.Add(new FrameChoice(k, $"{(long)k + 1}번 프레임 (없음)", null));
+                choices.Add(new FrameChoice(k, $"{(long)k + 1}번 프레임 (없음)", null, Exists: false));
             }
 
             if (!choices.SequenceEqual(FrameChoices))
@@ -168,10 +170,10 @@ public sealed partial class RuleItemViewModel : ObservableObject
             return;
         }
 
-        if (SelectedFrame?.Thumbnail is null && FrameIndex is int missing)
+        if (SelectedFrame is { Exists: false } && FrameIndex is int missing)
         {
             // 세트에 프레임이 하나도 없으면(빈 세트·폴더 없음) 예시 세트가 대신 보이므로 '마지막 프레임' 안내는 맞지 않다.
-            Error = FrameChoices.Any(c => c.Thumbnail is not null)
+            Error = FrameChoices.Any(c => c.Index is not null && c.Exists)
                 ? $"사용 중인 세트에 {(long)missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다."
                 : $"사용 중인 세트에 표시할 프레임이 없습니다. 이미지를 추가하면 {(long)missing + 1}번 프레임이 쓰입니다.";
             return;

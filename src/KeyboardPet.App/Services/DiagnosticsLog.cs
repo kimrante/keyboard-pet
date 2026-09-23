@@ -53,19 +53,32 @@ public static class DiagnosticsLog
                 if (_trace is null)
                 {
                     System.IO.Directory.CreateDirectory(Directory);
-                    _trace = new StreamWriter(new FileStream(TracePath, FileMode.Create, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
+                    _trace = OpenTrace();
                     _trace.Write(BuildHeader());
+                    _trace.Flush();
                 }
 
-                _trace.Write('[');
-                _trace.Write(DateTimeOffset.Now.ToString("HH:mm:ss.fff"));
-                _trace.Write("] ");
-                _trace.WriteLine(step);
+                _trace.WriteLine($"[{DateTimeOffset.Now:HH:mm:ss.fff}] {step}");
+                _trace.Flush();   // 줄마다 한 번만 실제 쓰기
             }
         }
         catch
         {
             // 무시
+        }
+    }
+
+    /// <summary>실행 중인 인스턴스가 startup.log를 쥐고 있으면(두 번째 실행) 프로세스별 파일에 남긴다.</summary>
+    private static StreamWriter OpenTrace()
+    {
+        try
+        {
+            return new StreamWriter(new FileStream(TracePath, FileMode.Create, FileAccess.Write, FileShare.Read));
+        }
+        catch (IOException)
+        {
+            var path = Path.Combine(Directory, $"startup-{Environment.ProcessId}.log");
+            return new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read));
         }
     }
 

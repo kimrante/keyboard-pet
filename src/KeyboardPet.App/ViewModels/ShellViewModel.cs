@@ -144,6 +144,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // 루트 컨테이너에서 만들면 IDisposable인 SettingsViewModel이 앱 종료까지 컨테이너에 붙잡혀(프레임 비트맵과 함께)
         // 창을 열 때마다 누적된다. 창마다 스코프를 만들고 닫힐 때 함께 버린다.
         var scope = _services.CreateScope();
+        ShowPet();
         _settingsWindow = scope.ServiceProvider.GetRequiredService<SettingsWindow>();
         _settingsWindow.Closed += (_, _) =>
         {
@@ -151,6 +152,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             scope.Dispose();
         };
         _settingsWindow.Show();
+    }
+
+    /// <summary>Alt+F4 등으로 숨겨진 펫 창을 다시 보여 준다.</summary>
+    [RelayCommand]
+    private void ShowPet()
+    {
+        var pet = _services.GetRequiredService<PetWindow>();
+        if (!pet.IsVisible)
+        {
+            pet.Show();
+        }
     }
 
     [RelayCommand]

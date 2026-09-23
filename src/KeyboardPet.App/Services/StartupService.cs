@@ -55,11 +55,24 @@ public sealed class StartupService : IDisposable
     {
         try
         {
-            using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
-            if (enabled)
+            var desired = enabled
+                ? $"\"{Environment.ProcessPath ?? throw new InvalidOperationException("실행 파일 경로를 알 수 없습니다.")}\""
+                : null;
+
+            // 실행할 때마다 Run 키를 쓰지 않도록, 현재 값과 다를 때만 쓴다(일부 백신은 Run 키 쓰기를 표시한다).
+            using (var read = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false))
             {
-                var exe = Environment.ProcessPath ?? throw new InvalidOperationException("실행 파일 경로를 알 수 없습니다.");
-                key.SetValue(ValueName, $"\"{exe}\"");
+                if (Equals(read?.GetValue(ValueName) as string, desired))
+                {
+                    LastError = null;
+                    return;
+                }
+            }
+
+            using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath, writable: true);
+            if (desired is not null)
+            {
+                key.SetValue(ValueName, desired);
             }
             else
             {

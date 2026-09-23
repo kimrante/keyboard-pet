@@ -55,8 +55,6 @@ public sealed record IdleFrameChoice(FrameEntryViewModel? Entry, string Label)
 /// </summary>
 public sealed partial class FrameSetItemViewModel : ObservableObject
 {
-    private const int ThumbnailPixelWidth = 48;
-
     private int _thumbnailGeneration;
     private bool _refreshingIdleChoices;
     private string? _idleFrameName;
@@ -300,27 +298,47 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
     {
         Frames.Clear();
         var folderExists = Directory.Exists(Folder);
-        var names = explicitFrames ?? (folderExists ? ImageCache.ListFolderFiles(Folder) : Array.Empty<string>());
+        var present = folderExists ? ImageCache.ListFolderFiles(Folder) : Array.Empty<string>();
+        var names = explicitFrames ?? present;
+        // 파일마다 File.Exists를 부르는 대신 폴더를 한 번만 읽는다(네트워크·OneDrive 폴더에서 수백 번의 stat을 피한다).
+        var presentSet = explicitFrames is null ? null : present.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var animationSet = animationFrames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var number = 0;
         foreach (var name in names)
         {
-            var exists = folderExists && File.Exists(Path.Combine(Folder, name));
+            var exists = presentSet is null || presentSet.Contains(name);
             var inAnimation = animationSet is null || animationSet.Contains(name);
             Frames.Add(new FrameEntryViewModel(this, name, ++number, isMissing: !exists, inAnimation));
         }
 
         RefreshIdleChoices();
+        FillThumbnailsFromCache();
         LoadThumbnailsAsync();
     }
 
-    /// <summary>썸네일은 파일 수가 많을 수 있으므로 백그라운드에서 디코딩한 뒤 UI 스레드에 반영한다.</summary>
+    /// <summary>사용 중인 세트의 파일은 이미 디코딩되어 있으므로 캐시의 썸네일을 그대로 쓴다(디스크를 다시 읽지 않음).</summary>
+    private void FillThumbnailsFromCache()
+    {
+        foreach (var entry in Frames)
+        {
+            if (!entry.IsMissing && entry.Thumbnail is null)
+            {
+                entry.Thumbnail = Owner.GetFileThumbnail(Path.Combine(Folder, entry.FileName));
+            }
+        }
+    }
+
+    /// <summary>세트가 다시 로드되거나 썸네일이 준비되면 비어 있는 썸네일을 캐시에서 채운다.</summary>
+    public void RefreshThumbnails() => FillThumbnailsFromCache();
+
+    /// <summary>캐시에 없는 파일(사용 중이 아닌 세트 등)만 백그라운드에서 축소 디코딩한 뒤 UI 스레드에 반영한다.</summary>
     private void LoadThumbnailsAsync()
     {
         var generation = ++_thumbnailGeneration;
         var folder = Folder;
-        var entries = Frames.Where(f => !f.IsMissing).ToList();
+        // 캐시에 있는 파일(사용 중인 세트)은 썸네일이 준비되는 대로 캐시에서 받으므로 디스크를 읽지 않는다.
+        var entries = Frames.Where(f => !f.IsMissing && f.Thumbnail is null && !Owner.IsFileCached(Path.Combine(folder, f.FileName))).ToList();
         if (entries.Count == 0)
         {
             return;
@@ -338,7 +356,7 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
                 var thumbnails = task.Result;
                 for (var i = 0; i < entries.Count && i < thumbnails.Count; i++)
                 {
-                    entries[i].Thumbnail = thumbnails[i];
+                    entries[i].Thumbnail ??= thumbnails[i];
                 }
             }, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -371,7 +389,7 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
             bitmap.BeginInit();
             bitmap.UriSource = new Uri(path, UriKind.Absolute);
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = ThumbnailPixelWidth;
+            bitmap.DecodePixelWidth = ImageCache.ThumbnailPixels;
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
