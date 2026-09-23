@@ -185,22 +185,16 @@ public sealed class LowLevelKeyboardHook : IKeyboardSource
             if (isDown is not null)
             {
                 var vk = Marshal.ReadInt32(lParam, VkCodeOffset);
-                bool isRepeat;
-                KeyModifiers modifiers;
-                if (isDown.Value)
+                if (!isDown.Value)
                 {
-                    var time = (uint)Marshal.ReadInt32(lParam, TimeOffset);
-                    isRepeat = _repeatDetector.OnKeyDown(vk, time);
-                    modifiers = ReadModifiers();
-                }
-                else
-                {
+                    // 키 업은 반복 감지에만 쓴다. 구독자가 모두 키 다운만 보므로 Dispatcher로 넘기지 않는다(전체 이벤트의 절반 절약).
                     _repeatDetector.OnKeyUp(vk);
-                    isRepeat = false;
-                    modifiers = KeyModifiers.None;
+                    return;
                 }
 
-                _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, isDown.Value, modifiers, isRepeat));
+                var time = (uint)Marshal.ReadInt32(lParam, TimeOffset);
+                var isRepeat = _repeatDetector.OnKeyDown(vk, time);
+                _dispatcher.BeginInvoke(DispatcherPriority.Input, _raise, new KeyEvent(vk, true, ReadModifiers(), isRepeat));
             }
         }
     }

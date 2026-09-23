@@ -31,17 +31,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private int _keystrokeCount;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight), nameof(EffectMargin))]
     private ImageSource? _currentFrame;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FrameWidth), nameof(FrameHeight), nameof(EffectMargin))]
     private double _scale = 1.0;
 
     /// <summary>효과가 이미지 밖으로 움직일 여백(이미지 긴 변에 대한 비율). EffectService가 설정한다.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(EffectMargin))]
     private EffectPadding _effectPadding = EffectPadding.None;
+
+    private double _frameWidth;
+    private double _frameHeight;
+    private Thickness _effectMargin;
 
     [ObservableProperty]
     private double _opacity = 1.0;
@@ -67,19 +68,43 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 표시 크기(DIP). 이미지 파일의 DPI 메타데이터를 무시하고 원본 픽셀 × 배율로 계산한다.
+    /// 프레임이 바뀔 때마다 통지하면 크기가 같은 프레임에서도 레이아웃이 다시 돌므로, 값이 달라졌을 때만 통지한다.
     /// </summary>
-    public double FrameWidth => (CurrentFrame as BitmapSource)?.PixelWidth * Scale ?? 0;
+    public double FrameWidth => _frameWidth;
 
-    public double FrameHeight => (CurrentFrame as BitmapSource)?.PixelHeight * Scale ?? 0;
+    public double FrameHeight => _frameHeight;
 
     /// <summary>이미지 둘레의 투명 여백(DIP). 흔들리거나 튀어오르는 이미지가 창 밖으로 잘리지 않게 한다.</summary>
-    public Thickness EffectMargin
+    public Thickness EffectMargin => _effectMargin;
+
+    partial void OnCurrentFrameChanged(ImageSource? value) => UpdateFrameSize();
+
+    partial void OnEffectPaddingChanged(EffectPadding value) => UpdateFrameSize();
+
+    private void UpdateFrameSize()
     {
-        get
+        var bitmap = CurrentFrame as BitmapSource;
+        var width = bitmap?.PixelWidth * Scale ?? 0;
+        var height = bitmap?.PixelHeight * Scale ?? 0;
+        if (width != _frameWidth)
         {
-            var size = Math.Max(FrameWidth, FrameHeight);
-            var p = EffectPadding;
-            return new Thickness(Math.Ceiling(p.Side * size), Math.Ceiling(p.Top * size), Math.Ceiling(p.Side * size), Math.Ceiling(p.Bottom * size));
+            _frameWidth = width;
+            OnPropertyChanged(nameof(FrameWidth));
+        }
+
+        if (height != _frameHeight)
+        {
+            _frameHeight = height;
+            OnPropertyChanged(nameof(FrameHeight));
+        }
+
+        var size = Math.Max(width, height);
+        var p = EffectPadding;
+        var margin = new Thickness(Math.Ceiling(p.Side * size), Math.Ceiling(p.Top * size), Math.Ceiling(p.Side * size), Math.Ceiling(p.Bottom * size));
+        if (margin != _effectMargin)
+        {
+            _effectMargin = margin;
+            OnPropertyChanged(nameof(EffectMargin));
         }
     }
 
@@ -116,8 +141,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _settingsWindow = _services.GetRequiredService<SettingsWindow>();
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        // 루트 컨테이너에서 만들면 IDisposable인 SettingsViewModel이 앱 종료까지 컨테이너에 붙잡혀(프레임 비트맵과 함께)
+        // 창을 열 때마다 누적된다. 창마다 스코프를 만들고 닫힐 때 함께 버린다.
+        var scope = _services.CreateScope();
+        _settingsWindow = scope.ServiceProvider.GetRequiredService<SettingsWindow>();
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsWindow = null;
+            scope.Dispose();
+        };
         _settingsWindow.Show();
     }
 
@@ -126,7 +158,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnIsTopmostChanged(bool value) => Push(s => s with { IsTopmost = value });
 
-    partial void OnScaleChanged(double value) => Push(s => s with { Window = s.Window with { Scale = value } });
+    partial void OnScaleChanged(double value)
+    {
+        UpdateFrameSize();
+        Push(s => s with { Window = s.Window with { Scale = value } });
+    }
 
     partial void OnOpacityChanged(double value) => Push(s => s with { Window = s.Window with { Opacity = value } });
 

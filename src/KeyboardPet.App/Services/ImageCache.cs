@@ -200,8 +200,9 @@ public sealed class ImageCache
         var decoder = BitmapDecoder.Create(uri, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         foreach (var frame in decoder.Frames)
         {
-            // BitmapFrame은 메타데이터 때문에 Freeze가 거부될 수 있으므로 순수 비트맵으로 복사한다.
-            BitmapSource bitmap = frame.CanFreeze ? frame : new WriteableBitmap(frame);
+            // BitmapFrame을 그대로 두면 디코더와 OnLoad로 읽어 둔 파일 원본 바이트까지 붙잡는다.
+            // 픽셀만 복사해 두면 프레임 하나당 디코딩된 표면만 남는다(메타데이터 때문에 Freeze가 거부되는 경우도 해결).
+            BitmapSource bitmap = new WriteableBitmap(frame);
             bitmap.Freeze();
             yield return bitmap;
         }

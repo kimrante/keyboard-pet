@@ -93,9 +93,9 @@ public sealed partial class RuleItemViewModel : ObservableObject
         _refreshingChoices = true;
         try
         {
-            var setName = Owner.DefaultFrameSet ?? string.Empty;
+            var setName = Owner.CurrentSetName;
             var frames = Owner.GetFrames(setName);
-            var loop = Owner.GetLoopFrames(setName);
+            var loop = Owner.GetLoopFrames(setName)?.ToHashSet();   // 프레임마다 Contains: 목록이면 O(n²)
             var choices = new List<FrameChoice> { FrameChoice.WholeSet };
             for (var i = 0; i < frames.Count; i++)
             {

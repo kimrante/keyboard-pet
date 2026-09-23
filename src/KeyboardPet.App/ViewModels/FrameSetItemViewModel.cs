@@ -107,9 +107,10 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
             ? _idleFrameName
             : null;
 
+        // Normalized()와 같은 값을 내야 설정 동기화에서 "바뀌지 않음"으로 판정되어 카드가 다시 만들어지지 않는다.
         return new FrameSetSettings(
-            Name,
-            Folder,
+            Name.Trim(),
+            Folder.Trim(),
             HasCustomFrames ? Frames.Select(f => f.FileName).ToList() : null,
             Frames.All(f => f.InAnimation) ? null : Frames.Where(f => f.InAnimation).Select(f => f.FileName).ToList(),
             idle);

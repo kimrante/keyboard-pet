@@ -148,6 +148,27 @@ public class AdaptiveSchedulerTests
     }
 
     [Fact]
+    public void Idle_StopsTheTimer_AndFirstKeystrokeRestartsIt()
+    {
+        var h = new Harness();
+        h.Scheduler.Start();
+        Assert.False(h.Timer.IsRunning);          // 정지 상태로 시작: 첫 입력 전에는 UI 스레드를 깨우지 않는다
+        Assert.True(h.Scheduler.IsRunning);
+
+        h.Type(3, 100);
+        Assert.True(h.Timer.IsRunning);
+
+        h.Tick(2300);                             // 복귀 시간 경과 → 정지, 타이머도 멈춤
+        Assert.True(h.Scheduler.IsIdle);
+        Assert.False(h.Timer.IsRunning);
+        Assert.True(h.Scheduler.IsRunning);       // Stop 전이므로 여전히 실행 중
+
+        h.Scheduler.OnKeystroke();
+        Assert.False(h.Scheduler.IsIdle);
+        Assert.True(h.Timer.IsRunning);
+    }
+
+    [Fact]
     public void IdleReturnZero_KeepsCyclingAtSlowIntervalWithoutInput()
     {
         var h = new Harness(TimeSpan.Zero);

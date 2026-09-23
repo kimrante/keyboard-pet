@@ -369,7 +369,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     private EffectItemViewModel CreateEffect(FrameEffect effect) =>
-        new(effect, Effects, CommitEffects, frames: () => GetFrames(DefaultFrameSet ?? string.Empty));
+        new(effect, Effects, CommitEffects, frames: () => GetFrames(CurrentSetName));
 
     // ── 명령: 키 매핑 ──
 
@@ -486,10 +486,22 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     // ── 설정 → 뷰모델 동기화 ──
 
-    private void OnSettingsChanged(AppSettings old, AppSettings @new) => SyncFrom(@new);
+    private void OnSettingsChanged(AppSettings old, AppSettings @new) => SyncFrom(@new, old);
 
-    private void SyncFrom(AppSettings s)
+    /// <summary>현재 사용 중인 세트 이름(설정 기준). 규칙·효과의 프레임 목록은 이 세트에서 가져온다.</summary>
+    public string CurrentSetName => _settings.Current.DefaultFrameSet;
+
+    /// <summary>
+    /// 설정 → 뷰모델. <paramref name="old"/>가 있으면 바뀐 부분만 동기화한다(슬라이더 드래그마다 호출되므로
+    /// 세트 카드·규칙·효과 목록을 매번 다시 비교하거나 만들지 않는다).
+    /// </summary>
+    private void SyncFrom(AppSettings s, AppSettings? old = null)
     {
+        var setChanged = old is null || !string.Equals(old.DefaultFrameSet, s.DefaultFrameSet, StringComparison.OrdinalIgnoreCase);
+        var setsChanged = old is null || !AppSettings.FrameSetsEqual(old.FrameSets, s.FrameSets);
+        var effectsChanged = setChanged || !FrameEffect.ListsEqual(old!.EffectiveEffects, s.EffectiveEffects);
+        var rulesChanged = setChanged || !AppSettings.RulesEqual(old!.EffectiveRules, s.EffectiveRules);
+
         _syncing = true;
         try
         {
@@ -513,51 +525,47 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             AdaptiveTargetKeysPerSecond = animation.AdaptiveTargetKeysPerSecond;
             AdaptiveWindowMs = animation.AdaptiveWindowMs;
 
-            var currentSets = FrameSets.Select(f => f.ToSettings()).ToList();
-            if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
+            if (setsChanged)
             {
-                FrameSets.Clear();
-                foreach (var fs in s.FrameSets)
+                var currentSets = FrameSets.Select(f => f.ToSettings()).ToList();
+                if (!AppSettings.FrameSetsEqual(currentSets, s.FrameSets))
                 {
-                    FrameSets.Add(new FrameSetItemViewModel(this, fs));
+                    FrameSets.Clear();
+                    foreach (var fs in s.FrameSets)
+                    {
+                        FrameSets.Add(new FrameSetItemViewModel(this, fs));
+                    }
                 }
+
+                RefreshAvailableSetNames();
             }
 
-            RefreshAvailableSetNames();
             DefaultFrameSet = s.DefaultFrameSet;
 
-            var currentEffects = Effects.Select(e => e.ToEffect()).ToList();
-            if (!FrameEffect.ListsEqual(currentEffects, s.EffectiveEffects))
+            // 세트가 바뀌거나 다시 로드될 때의 프레임 목록(썸네일) 갱신은 AnimationService.Reloaded → RefreshStatuses가 맡는다.
+            if (effectsChanged)
             {
-                Effects.Clear();
-                foreach (var effect in s.EffectiveEffects)
+                var currentEffects = Effects.Select(e => e.ToEffect()).ToList();
+                if (!FrameEffect.ListsEqual(currentEffects, s.EffectiveEffects))
                 {
-                    Effects.Add(CreateEffect(effect));
-                }
-            }
-            else
-            {
-                foreach (var effect in Effects)
-                {
-                    effect.RefreshFrames();
+                    Effects.Clear();
+                    foreach (var effect in s.EffectiveEffects)
+                    {
+                        Effects.Add(CreateEffect(effect));
+                    }
                 }
             }
 
-            var currentRules = Rules.Select(r => r.ToRule()).ToList();
-            var effectiveRules = s.EffectiveRules;
-            if (!AppSettings.RulesEqual(currentRules, effectiveRules))
+            if (rulesChanged)
             {
-                Rules.Clear();
-                foreach (var rule in effectiveRules)
+                var currentRules = Rules.Select(r => r.ToRule()).ToList();
+                if (!AppSettings.RulesEqual(currentRules, s.EffectiveRules))
                 {
-                    Rules.Add(new RuleItemViewModel(this, rule));
-                }
-            }
-            else
-            {
-                foreach (var rule in Rules)
-                {
-                    rule.Revalidate();
+                    Rules.Clear();
+                    foreach (var rule in s.EffectiveRules)
+                    {
+                        Rules.Add(new RuleItemViewModel(this, rule));
+                    }
                 }
             }
         }

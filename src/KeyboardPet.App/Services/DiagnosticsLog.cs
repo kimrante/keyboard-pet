@@ -11,7 +11,7 @@ namespace KeyboardPet.App.Services;
 public static class DiagnosticsLog
 {
     private static readonly object Sync = new();
-    private static bool _traceStarted;
+    private static StreamWriter? _trace;
 
     public static string Directory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KeyboardPet");
@@ -47,16 +47,20 @@ public static class DiagnosticsLog
     {
         try
         {
-            System.IO.Directory.CreateDirectory(Directory);
             lock (Sync)
             {
-                if (!_traceStarted)
+                // 호출마다 파일을 열고 닫지 않도록 첫 호출에 열어 둔다(다른 프로세스가 읽을 수 있게 공유 읽기 허용).
+                if (_trace is null)
                 {
-                    _traceStarted = true;
-                    File.WriteAllText(TracePath, BuildHeader());
+                    System.IO.Directory.CreateDirectory(Directory);
+                    _trace = new StreamWriter(new FileStream(TracePath, FileMode.Create, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
+                    _trace.Write(BuildHeader());
                 }
 
-                File.AppendAllText(TracePath, $"[{DateTimeOffset.Now:HH:mm:ss.fff}] {step}{Environment.NewLine}");
+                _trace.Write('[');
+                _trace.Write(DateTimeOffset.Now.ToString("HH:mm:ss.fff"));
+                _trace.Write("] ");
+                _trace.WriteLine(step);
             }
         }
         catch
