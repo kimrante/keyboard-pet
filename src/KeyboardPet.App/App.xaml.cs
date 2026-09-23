@@ -36,7 +36,7 @@ public partial class App : Application
     }
 
     /// <summary>설정 폴더. --data-dir &lt;폴더&gt;로 바꿀 수 있다(스크린샷·테스트용 설정을 실제 설정과 분리).</summary>
-    public static string AppDataDirectory =>
+    public static string AppDataDirectory { get; } =
         ArgValue("--data-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet");
 
     public static IServiceProvider Services =>
@@ -46,7 +46,7 @@ public partial class App : Application
     private static bool HasArg(string name) =>
         Environment.GetCommandLineArgs().Skip(1).Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>"--이름 값" 형태 인수의 값. 없으면 null.</summary>
+    /// <summary>"--이름 값" 형태 인수의 값. 없거나 값 자리에 다른 스위치가 오면 null.</summary>
     private static string? ArgValue(string name)
     {
         var args = Environment.GetCommandLineArgs();
@@ -54,7 +54,7 @@ public partial class App : Application
         {
             if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
             {
-                return args[i + 1];
+                return args[i + 1].StartsWith("--", StringComparison.Ordinal) ? null : args[i + 1];
             }
         }
 
@@ -92,7 +92,7 @@ public partial class App : Application
             DiagnosticsLog.Trace("다른 인스턴스가 이미 실행 중 → 종료");
             ShowMessage("Keyboard Pet이 이미 실행 중입니다.\n트레이에 아이콘이 없다면 작업 관리자에서 KeyboardPet.exe를 끝낸 뒤 다시 실행하세요.", "Keyboard Pet",
                 MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown();
+            Shutdown(IsUnattended ? 1 : 0);
             return;
         }
 

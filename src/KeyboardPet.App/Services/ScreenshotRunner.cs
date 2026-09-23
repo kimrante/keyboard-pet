@@ -34,8 +34,8 @@ public static class ScreenshotRunner
 
         await Settle();
 
-        // 1) 평소 상태: 세트 효과(모든 프레임·특정 프레임)가 시간에 따라 움직이는 모습
-        SaveStrip(Path.Combine(directory, "pet-set-effects.png"), "세트 효과 (키 입력 없음)", pet, effects, clock, baseMs: 1000);
+        // 1) 평소 상태: 모든 프레임에 걸린 세트 효과가 시간에 따라 움직이는 모습(시계는 시작부터 0에 고정되어 있어 0 ms가 정지 상태)
+        SaveStrip(Path.Combine(directory, "pet-set-effects.png"), "세트 효과 (키 입력 없음)", pet, effects, clock, baseMs: 0);
 
         // 2) Enter: 규칙이 2번 프레임을 보여 주고, 규칙 효과 + 그 프레임에 걸린 세트 효과가 합성된다
         clock.Override = 5000;
@@ -71,8 +71,8 @@ public static class ScreenshotRunner
             }
         }
 
-        // 펫이 움직이는 상태로 바깥 캡처를 기다린다.
-        clock.Override = null;
+        // 펫이 움직이는 상태로 바깥 캡처를 기다린다(시계는 고정했던 시각에서 이어서 흐른다).
+        clock.Release();
         File.WriteAllText(Path.Combine(directory, "ready.flag"), DateTime.Now.ToString("O"));
         var done = Path.Combine(directory, "done.flag");
         for (var i = 0; i < 200 && !File.Exists(done); i++)

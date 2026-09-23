@@ -11,11 +11,22 @@ namespace KeyboardPet.App.Services;
 public sealed class EffectClock
 {
     private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+    private double _offset;
 
     /// <summary>값이 있으면 실제 시계 대신 이 시각(ms)을 쓴다.</summary>
     public double? Override { get; set; }
 
-    public double NowMs => Override ?? _stopwatch.Elapsed.TotalMilliseconds;
+    public double NowMs => Override ?? _stopwatch.Elapsed.TotalMilliseconds + _offset;
+
+    /// <summary>고정을 풀되 시각이 뒤로 가지 않도록, 고정했던 시각에서 이어서 흐르게 한다.</summary>
+    public void Release()
+    {
+        if (Override is double frozen)
+        {
+            _offset = frozen - _stopwatch.Elapsed.TotalMilliseconds;
+            Override = null;
+        }
+    }
 }
 
 /// <summary>
@@ -63,6 +74,7 @@ public sealed class EffectService : IDisposable
         if (_mixer.IsIdle(frame, ruleEffects))
         {
             Stop();
+            Publish(EffectTransform.Identity);
         }
     }
 
@@ -76,10 +88,11 @@ public sealed class EffectService : IDisposable
 
     private void OnSettingsChanged(AppSettings old, AppSettings @new)
     {
-        if (!FrameEffect.ListsEqual(old.EffectiveEffects, @new.EffectiveEffects)
-            || !AppSettings.RulesEqual(old.EffectiveRules, @new.EffectiveRules))
+        var effectsChanged = !FrameEffect.ListsEqual(old.EffectiveEffects, @new.EffectiveEffects);
+        if (effectsChanged || !AppSettings.RulesEqual(old.EffectiveRules, @new.EffectiveRules))
         {
-            Configure(@new);
+            // 규칙만 바뀌었으면 여백만 다시 잡는다(세트 효과의 진행 중인 움직임을 끊지 않도록).
+            Configure(@new, reconfigureMixer: effectsChanged);
             EnsureRunning();
         }
     }
@@ -92,9 +105,12 @@ public sealed class EffectService : IDisposable
 
     private void OnFrameChanged(int frameIndex) => EnsureRunning();
 
-    private void Configure(AppSettings s)
+    private void Configure(AppSettings s, bool reconfigureMixer = true)
     {
-        _mixer.Configure(s.EffectiveEffects);
+        if (reconfigureMixer)
+        {
+            _mixer.Configure(s.EffectiveEffects);
+        }
 
         // 펫 창이 효과를 잘라내지 않도록, 세트 효과와 규칙 효과가 한꺼번에 움직일 때의 여백을 둔다.
         var all = s.EffectiveEffects.Concat(s.EffectiveRules.SelectMany(r => r.Effects ?? Array.Empty<FrameEffect>()));
@@ -119,8 +135,6 @@ public sealed class EffectService : IDisposable
             _running = false;
             CompositionTarget.Rendering -= OnRendering;
         }
-
-        Publish(EffectTransform.Identity);
     }
 
     private void OnRendering(object? sender, EventArgs e) => Tick();

@@ -112,16 +112,14 @@ public sealed record FrameEffect(
     }
 
     /// <summary>
-    /// 바닥 가운데를 축으로 <paramref name="degrees"/>만큼 기울인 정사각형의 위쪽 모서리가 옆·위로 얼마나 나가는지.
-    /// 위쪽 모서리 (±½, −1)은 x = ½cosθ + sinθ, y = −(½sinθ + cosθ)로, 아래쪽 모서리 (±½, 0)은 y = ½sinθ로 움직인다.
+    /// 바닥 가운데를 축으로 <paramref name="degrees"/>만큼 기울였을 때 이미지가 밖으로 나가는 범위의 상한(긴 변 L 기준).
+    /// 너비 W, 높이 H(둘 다 ≤ L)일 때 위쪽 모서리는 옆으로 H·sinθ + ½W(cosθ−1) ≤ L·sinθ, 위로 ½W·sinθ − H(1−cosθ) ≤ ½L·sinθ,
+    /// 아래쪽 모서리는 아래로 ½W·sinθ ≤ ½L·sinθ 움직이므로, 가로세로 비율과 무관하게 이 값이면 잘리지 않는다.
     /// </summary>
     private static EffectPadding TiltExtent(double degrees)
     {
-        var (sin, cos) = Math.SinCos(degrees * Math.PI / 180);
-        return new EffectPadding(
-            Math.Max(0, 0.5 * cos + sin - 0.5),
-            Math.Max(0, 0.5 * sin + cos - 1),
-            0.5 * sin);
+        var sin = Math.Sin(degrees * Math.PI / 180);
+        return new EffectPadding(sin, 0.5 * sin, 0.5 * sin);
     }
 
     /// <summary>효과 목록을 값으로 비교한다(Frames 목록 포함).</summary>

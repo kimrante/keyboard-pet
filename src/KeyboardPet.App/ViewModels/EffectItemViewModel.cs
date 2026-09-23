@@ -139,10 +139,13 @@ public sealed partial class EffectItemViewModel : ObservableObject
         try
         {
             var frames = _frames();
-            var count = Math.Max(frames.Count, _selectedFrames.Count == 0 ? 0 : _selectedFrames.Max + 1);
+
+            // 세트의 프레임 하나씩 + 세트에 없는 선택(프레임이 줄었거나 아직 로드 전)은 자리표시 항목으로만 둔다(번호 크기와 무관).
+            var indices = Enumerable.Range(0, frames.Count).Concat(_selectedFrames.Where(i => i >= frames.Count)).ToList();
 
             // 프레임이 그대로면 다시 만들지 않는다(클릭 중인 체크박스가 교체되지 않도록).
-            var unchanged = FrameToggles.Count == count
+            var unchanged = FrameToggles.Count == indices.Count
+                            && FrameToggles.Select(t => t.Index).SequenceEqual(indices)
                             && FrameToggles.All(t => ReferenceEquals(t.Thumbnail, t.Index < frames.Count ? frames[t.Index] : null));
             if (unchanged)
             {
@@ -150,7 +153,7 @@ public sealed partial class EffectItemViewModel : ObservableObject
             }
 
             FrameToggles.Clear();
-            for (var i = 0; i < count; i++)
+            foreach (var i in indices)
             {
                 FrameToggles.Add(new FrameToggleViewModel(i, i < frames.Count ? frames[i] : null, _selectedFrames.Contains(i), OnFrameToggled));
             }
