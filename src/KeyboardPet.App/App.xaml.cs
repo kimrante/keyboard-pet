@@ -35,8 +35,9 @@ public partial class App : Application
         };
     }
 
-    public static string AppDataDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet");
+    /// <summary>설정 폴더. --data-dir &lt;폴더&gt;로 바꿀 수 있다(스크린샷·테스트용 설정을 실제 설정과 분리).</summary>
+    public static string AppDataDirectory { get; } =
+        ArgValue("--data-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet");
 
     public static IServiceProvider Services =>
         ((App)Current)._services ?? throw new InvalidOperationException("DI 컨테이너가 아직 초기화되지 않았습니다.");
@@ -44,6 +45,38 @@ public partial class App : Application
     /// <summary>실행 인수. --no-tray: 트레이 아이콘 생략, --no-hook: 키보드 훅 생략 (문제 원인 분리용).</summary>
     private static bool HasArg(string name) =>
         Environment.GetCommandLineArgs().Skip(1).Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>"--이름 값" 형태 인수의 값. 없거나 값 자리에 다른 스위치가 오면 null.</summary>
+    private static string? ArgValue(string name)
+    {
+        var args = Environment.GetCommandLineArgs();
+        for (var i = 1; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1].StartsWith("--", StringComparison.Ordinal) ? null : args[i + 1];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>--screenshot &lt;폴더&gt;: 스크린샷을 저장하고 종료하는 무인 실행 모드. 메시지 상자를 띄우지 않는다.</summary>
+    private static string? ScreenshotDirectory { get; } = ArgValue("--screenshot");
+
+    private static bool IsUnattended => ScreenshotDirectory is not null;
+
+    /// <summary>메시지 상자. 무인 실행 모드에서는 로그만 남긴다(CI에서 멈추지 않도록).</summary>
+    private static void ShowMessage(string text, string caption, MessageBoxButton button, MessageBoxImage image)
+    {
+        if (IsUnattended)
+        {
+            DiagnosticsLog.Trace($"[메시지 생략] {text}");
+            return;
+        }
+
+        MessageBox.Show(text, caption, button, image);
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -57,9 +90,9 @@ public partial class App : Application
         if (!createdNew)
         {
             DiagnosticsLog.Trace("다른 인스턴스가 이미 실행 중 → 종료");
-            MessageBox.Show("Keyboard Pet이 이미 실행 중입니다.\n트레이에 아이콘이 없다면 작업 관리자에서 KeyboardPet.exe를 끝낸 뒤 다시 실행하세요.", "Keyboard Pet",
+            ShowMessage("Keyboard Pet이 이미 실행 중입니다.\n트레이에 아이콘이 없다면 작업 관리자에서 KeyboardPet.exe를 끝낸 뒤 다시 실행하세요.", "Keyboard Pet",
                 MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown();
+            Shutdown(IsUnattended ? 1 : 0);
             return;
         }
 
@@ -81,6 +114,7 @@ public partial class App : Application
         }
 
         if (!RunStep("애니메이션 초기화", () => _services.GetRequiredService<AnimationService>().Initialize(), fatal: true)
+            || !RunStep("효과 초기화", () => _services.GetRequiredService<EffectService>().Initialize(), fatal: true)
             || !RunStep("펫 창 표시", () => _services.GetRequiredService<PetWindow>().Show(), fatal: true))
         {
             return;
@@ -101,14 +135,33 @@ public partial class App : Application
 
         if (settings.LastLoadError is not null)
         {
-            MessageBox.Show(
+            ShowMessage(
                 "설정 파일이 손상되어 기본값으로 시작합니다.\n손상된 파일은 설정 폴더에 .corrupt-* 이름으로 보관됩니다.",
                 "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
+        if (ScreenshotDirectory is { } screenshotDir)
+        {
+            // 효과 시계를 0에 고정해 두고, 첫 렌더링이 끝난 뒤 시작한다. 실패하면 로그를 남기고 종료 코드 1로 끝낸다.
+            _services.GetRequiredService<EffectClock>().Override = 0;
+            Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    await ScreenshotRunner.RunAsync(_services, screenshotDir);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticsLog.Write("스크린샷 모드 실패", ex);
+                    Shutdown(1);
+                }
+            }, DispatcherPriority.ApplicationIdle);
+            return;
+        }
+
         if (!tray.IsCreated)
         {
-            MessageBox.Show(
+            ShowMessage(
                 "트레이 아이콘을 만들지 못해 트레이 없이 실행합니다.\n설정과 종료 메뉴는 펫 창을 마우스 오른쪽 버튼으로 눌러 열 수 있습니다.\n" +
                 $"자세한 내용: {DiagnosticsLog.FilePath}",
                 "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -140,14 +193,14 @@ public partial class App : Application
 
             if (fatal)
             {
-                MessageBox.Show(
+                ShowMessage(
                     $"{name} 중 오류가 발생해 Keyboard Pet을 시작할 수 없습니다.\n\n{ex.GetType().Name}: {ex.Message}\n\n자세한 내용: {DiagnosticsLog.FilePath}",
                     "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Error);
-                Shutdown();
+                Shutdown(IsUnattended ? 1 : 0);
             }
             else if (userMessage is not null)
             {
-                MessageBox.Show(userMessage, "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowMessage(userMessage, "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
             return false;
@@ -178,6 +231,8 @@ public partial class App : Application
         // Animation
         services.AddSingleton<ImageCache>();
         services.AddSingleton<AnimationService>();
+        services.AddSingleton<EffectClock>();
+        services.AddSingleton<EffectService>();
 
         // ViewModels
         services.AddSingleton<ShellViewModel>();
@@ -198,8 +253,14 @@ public partial class App : Application
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         DiagnosticsLog.Write("UI 스레드 미처리 예외", e.Exception);
+        if (IsUnattended)
+        {
+            e.Handled = true;
+            Current.Shutdown(1);
+            return;
+        }
 
-        MessageBox.Show(
+        ShowMessage(
             $"예기치 않은 오류가 발생했습니다. 앱은 계속 실행됩니다.\n\n{e.Exception.GetType().Name}: {e.Exception.Message}\n\n자세한 내용: {DiagnosticsLog.FilePath}",
             "Keyboard Pet", MessageBoxButton.OK, MessageBoxImage.Error);
 

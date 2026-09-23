@@ -29,6 +29,9 @@ public sealed class KeyRuleController : IDisposable
     /// <summary>보여줄 대상이 바뀌어야 할 때 발생.</summary>
     public event Action<DisplayRequest>? DisplayChanged;
 
+    /// <summary>규칙이 매칭되어 활성화될 때마다 발생(표시 대상이 그대로여도).</summary>
+    public event Action<KeyRule>? RuleActivated;
+
     /// <summary>키 다운(반복 제외) 이벤트를 넘긴다. 매칭된 규칙을 반환한다(없으면 null).</summary>
     public KeyRule? OnKeyDown(KeyEvent e)
     {
@@ -58,6 +61,7 @@ public sealed class KeyRuleController : IDisposable
         _holdTimer.Tick -= OnHoldExpired;
         _holdTimer.Dispose();
         DisplayChanged = null;
+        RuleActivated = null;
     }
 
     private void Activate(KeyRule rule)
@@ -78,6 +82,8 @@ public sealed class KeyRuleController : IDisposable
             _holdTimer.Interval = TimeSpan.FromMilliseconds(rule.HoldMs);
             _holdTimer.Start();
         }
+
+        RuleActivated?.Invoke(rule);
     }
 
     private void OnHoldExpired()

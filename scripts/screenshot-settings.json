@@ -1,0 +1,24 @@
+{
+  // scripts/screenshots.ps1 이 쓰는 데모 설정: 예시 세트에 효과와 효과가 달린 키 규칙을 둔다.
+  "version": 2,
+  "isTopmost": true,
+  "window": { "scale": 1.0, "showCounter": true },
+  "defaultFrameSet": "예시",
+  "setProfiles": {
+    "예시": {
+      "animation": { "mode": "Keystroke" },
+      "effects": [
+        { "kind": "BobVertical", "strength": 50, "periodMs": 800 },
+        { "kind": "Tilt", "strength": 70, "periodMs": 600, "frames": [ 1 ] }
+      ],
+      "rules": [
+        { "keys": [ "Enter" ], "holdMs": 5000, "resetIndex": true, "frameIndex": 1,
+          "effects": [ { "kind": "Bounce", "strength": 80, "periodMs": 800 } ] },
+        { "keys": [ "Space" ], "holdMs": 5000, "resetIndex": true,
+          "effects": [ { "kind": "ShakeHorizontal", "strength": 70, "periodMs": 400 },
+                       { "kind": "Squash", "strength": 60, "periodMs": 400 },
+                       { "kind": "Blink", "strength": 50, "periodMs": 800 } ] }
+      ]
+    }
+  }
+}

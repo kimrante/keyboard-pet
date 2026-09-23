@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using KeyboardPet.App.Services;
 using KeyboardPet.App.ViewModels;
+using KeyboardPet.Core.Effects;
 using KeyboardPet.Core.Settings;
 
 namespace KeyboardPet.App.Windows;
@@ -18,6 +19,9 @@ public partial class PetWindow : Window
 
     private readonly ShellViewModel _shell;
     private readonly SettingsService _settings;
+    private readonly EffectService _effects;
+    private Thickness _effectMargin;
+    private (double Width, double Height) _frameSize;
 
     /// <summary>
     /// true인 동안은 크기가 바뀔 때마다 작업 영역 우하단에 자동 정렬한다.
@@ -25,19 +29,22 @@ public partial class PetWindow : Window
     /// </summary>
     private bool _autoAnchor = true;
 
-    public PetWindow(ShellViewModel shell, SettingsService settings)
+    public PetWindow(ShellViewModel shell, SettingsService settings, EffectService effects)
     {
         InitializeComponent();
         _shell = shell;
         _settings = settings;
+        _effects = effects;
         DataContext = shell;
         ContextMenu = ContextMenuFactory.Create(shell);
 
+        // 저장된 위치는 이미지의 왼쪽 위다(효과 여백 제외). 여백이 없으면 창 위치와 같다.
+        _effectMargin = shell.EffectMargin;
         var saved = settings.Current.Window;
         if (saved.X is double x && saved.Y is double y && IsOnScreen(x, y))
         {
-            Left = x;
-            Top = y;
+            Left = x - _effectMargin.Left;
+            Top = y - _effectMargin.Top;
             _autoAnchor = false;
         }
         else
@@ -53,6 +60,8 @@ public partial class PetWindow : Window
         ContentRendered += (_, _) => DiagnosticsLog.Trace($"펫 창 렌더링 완료: 위치 ({Left:0},{Top:0}) 크기 {ActualWidth:0}x{ActualHeight:0}, 작업 영역 {SystemParameters.WorkArea}");
         _shell.PropertyChanged += OnShellPropertyChanged;
         _settings.Changed += OnSettingsChanged;
+        _effects.TransformChanged += ApplyEffect;
+        ApplyEffect(_effects.Current);
 
         // 전체화면 앱이나 다른 Topmost 창이 위로 올라오면 WPF의 Topmost만으로는 밀릴 수 있어 주기적으로 재적용한다.
         _topmostTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(2) };
@@ -90,6 +99,40 @@ public partial class PetWindow : Window
         {
             ApplyClickThrough(_shell.ClickThrough);
         }
+        else if (e.PropertyName == nameof(ShellViewModel.EffectMargin))
+        {
+            // 여백이 바뀌어도 이미지가 화면에서 제자리에 있도록 창을 반대로 옮긴다(자동 정렬 중이면 SizeChanged가 맞춘다).
+            var margin = _shell.EffectMargin;
+            if (!_autoAnchor)
+            {
+                Left -= margin.Left - _effectMargin.Left;
+                Top -= margin.Top - _effectMargin.Top;
+            }
+
+            _effectMargin = margin;
+        }
+        else if (e.PropertyName is nameof(ShellViewModel.FrameWidth) or nameof(ShellViewModel.FrameHeight))
+        {
+            // 이동량은 이미지 크기에 비례하므로 크기가 실제로 바뀐 프레임에서만 다시 적용한다(프레임마다 두 번 통지됨).
+            var size = (_shell.FrameWidth, _shell.FrameHeight);
+            if (size != _frameSize)
+            {
+                _frameSize = size;
+                ApplyEffect(_effects.Current);
+            }
+        }
+    }
+
+    /// <summary>효과 변형을 이미지에 적용한다. 이동은 이미지 크기에 대한 비율이므로 표시 크기를 곱한다.</summary>
+    private void ApplyEffect(EffectTransform t)
+    {
+        _frameSize = (_shell.FrameWidth, _shell.FrameHeight);
+        EffectScale.ScaleX = t.ScaleX;
+        EffectScale.ScaleY = t.ScaleY;
+        EffectRotate.Angle = t.Angle;
+        EffectTranslate.X = t.OffsetX * _shell.FrameWidth;
+        EffectTranslate.Y = t.OffsetY * _shell.FrameHeight;
+        FrameImage.Opacity = t.Opacity;
     }
 
     private void OnSettingsChanged(AppSettings old, AppSettings @new)
@@ -145,7 +188,7 @@ public partial class PetWindow : Window
         }
 
         _autoAnchor = false;
-        _settings.Update(s => s with { Window = s.Window with { X = left, Y = top } });
+        _settings.Update(s => s with { Window = s.Window with { X = left + _effectMargin.Left, Y = top + _effectMargin.Top } });
     }
 
     private void ApplyClickThrough(bool enabled)

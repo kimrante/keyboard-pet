@@ -1,0 +1,45 @@
+# CI: PR과 main 푸시마다 Windows 러너에서 테스트·빌드하고, 앱을 실제로 실행해 스크린샷을 아티팩트로 남긴다.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: 테스트
+        run: dotnet test tests/KeyboardPet.Core.Tests -c Release
+
+      - name: 앱 빌드
+        run: dotnet build src/KeyboardPet.App -c Release
+
+      - name: 스크린샷 (앱 실행)
+        run: ./scripts/screenshots.ps1 -OutDir screenshots
+
+      - name: 스크린샷 업로드
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: screenshots
+          path: screenshots/
+          if-no-files-found: warn

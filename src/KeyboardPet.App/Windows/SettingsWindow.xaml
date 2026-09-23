@@ -105,6 +105,100 @@
             <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Background" Value="White" />
         </Style>
+
+        <!-- 효과 카드: 효과 탭(세트 효과, 적용 프레임 선택 포함)과 키 매핑 규칙의 효과 목록이 함께 쓴다 -->
+        <DataTemplate x:Key="EffectItemTemplate" DataType="{x:Type vm:EffectItemViewModel}">
+            <Border BorderBrush="#DEE2E6" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,6" Background="#F8F9FA">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="176" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="58" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding KindChoices}" SelectedItem="{Binding SelectedKind}"
+                                  DisplayMemberPath="Label" ToolTip="{Binding KindDescription}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="강도" VerticalAlignment="Center" Margin="12,0,6,0" />
+                        <Slider Grid.Column="2" Minimum="0" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True" MinWidth="90"
+                                Value="{Binding Strength}" VerticalAlignment="Center" ToolTip="움직임의 크기 (0~100%)" />
+                        <TextBlock Grid.Column="3" Text="{Binding StrengthText}" VerticalAlignment="Center" TextAlignment="Right" />
+                        <TextBlock Grid.Column="4" Text="속도" VerticalAlignment="Center" Margin="12,0,6,0" />
+                        <!-- 왼쪽이 빠름: 한 번 움직이는 데 걸리는 시간(ms) -->
+                        <Slider Grid.Column="5" Minimum="100" Maximum="5000" TickFrequency="50" IsSnapToTickEnabled="True" MinWidth="90"
+                                Value="{Binding PeriodMs}" VerticalAlignment="Center" ToolTip="한 번 움직이는 데 걸리는 시간. 왼쪽일수록 빠릅니다" />
+                        <TextBlock Grid.Column="6" Text="{Binding PeriodText}" VerticalAlignment="Center" TextAlignment="Right" />
+                        <Button Grid.Column="7" Content="삭제" Style="{StaticResource SmallDangerButton}" Margin="10,0,0,0"
+                                Command="{Binding RemoveCommand}" />
+                    </Grid>
+
+                    <!-- 적용 프레임 (세트 효과만) -->
+                    <StackPanel Margin="0,6,0,0" Visibility="{Binding ShowFrameSelection, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="적용 프레임:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <CheckBox Content="모든 프레임" IsChecked="{Binding AllFrames}" VerticalAlignment="Center" Margin="0" />
+                            <TextBlock Text="{Binding FramesSummary}" Foreground="#6C757D" FontSize="11.5" VerticalAlignment="Center" Margin="12,0,0,0" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding FrameToggles}" Margin="0,4,0,0">
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding AllFrames}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:FrameToggleViewModel}">
+                                    <ToggleButton IsChecked="{Binding IsChecked}" Margin="0,0,4,4" Padding="3" Background="White"
+                                                  BorderBrush="#CED4DA" ToolTip="이 프레임이 보일 때 효과를 적용합니다">
+                                        <StackPanel>
+                                            <Border Width="40" Height="40">
+                                                <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                                            </Border>
+                                            <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" FontSize="11" />
+                                        </StackPanel>
+                                        <ToggleButton.Style>
+                                            <Style TargetType="ToggleButton">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="2" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsChecked" Value="True">
+                                                                    <Setter TargetName="Box" Property="BorderBrush" Value="#0D6EFD" />
+                                                                    <Setter TargetName="Box" Property="Background" Value="#CFE2FF" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="Box" Property="BorderBrush" Value="#86B7FE" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </ToggleButton.Style>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <TabControl Margin="8">
@@ -482,6 +576,33 @@
             </ScrollViewer>
         </TabItem>
 
+        <!-- ───────── 효과 ───────── -->
+        <TabItem Header="효과">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ProfileBannerTemplate}" Focusable="False" />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Left" Content="효과 추가" Style="{StaticResource BsPrimaryButton}" Command="{Binding AddEffectCommand}" Margin="0,0,12,0" />
+                        <TextBlock Style="{StaticResource Hint}" Margin="0" VerticalAlignment="Center"
+                                   Text="펫 이미지에 움직임을 더합니다. 효과를 여러 개 추가하면 함께 적용되고(예: 위아래 흔들기 + 기울이기), 효과마다 강도·속도와 적용할 프레임을 고를 수 있습니다. 바꾼 내용은 펫 창에 바로 보입니다." />
+                    </DockPanel>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Effects}" ItemTemplate="{StaticResource EffectItemTemplate}" />
+                </ScrollViewer>
+
+                <TextBlock Grid.Row="2" Style="{StaticResource Hint}"
+                           Text="적용 프레임: '모든 프레임'이면 항상, 아니면 고른 프레임이 보이는 동안만 움직입니다(키 전용 프레임도 고를 수 있습니다). 키를 눌렀을 때만 움직이게 하려면 키 매핑 탭에서 규칙에 효과를 추가하세요." />
+            </Grid>
+        </TabItem>
+
         <!-- ───────── 키 매핑 ───────── -->
         <TabItem Header="키 매핑">
             <Grid Margin="12">
@@ -507,6 +628,7 @@
                                 <Border Style="{StaticResource ItemCard}">
                                     <Grid>
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
@@ -574,6 +696,14 @@
                                                 Command="{Binding Owner.RemoveRuleCommand}" CommandParameter="{Binding}" />
 
                                         <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="8" Style="{StaticResource ErrorText}" Text="{Binding Error}" />
+
+                                        <!-- 이 키를 누른 동안 재생할 효과 -->
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8" Margin="0,6,0,0">
+                                            <ItemsControl ItemsSource="{Binding Effects}" ItemTemplate="{StaticResource EffectItemTemplate}" />
+                                            <Button Content="+ 효과" Style="{StaticResource SmallButton}" HorizontalAlignment="Left" Margin="0"
+                                                    Command="{Binding AddEffectCommand}"
+                                                    ToolTip="이 키를 누르면 유지 시간 동안 재생할 움직임 효과를 추가합니다(여러 개면 함께 적용)" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

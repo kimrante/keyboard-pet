@@ -1,4 +1,5 @@
 using KeyboardPet.Core.Animation;
+using KeyboardPet.Core.Effects;
 using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.Core.Settings;
@@ -67,10 +68,13 @@ public sealed record FrameSetSettings(
 }
 
 /// <summary>
-/// 이미지 세트에 귀속된 설정: 그 세트가 사용 중일 때 적용되는 애니메이션 옵션과 키 매핑 규칙.
-/// 항목이 null이면 세트 기본값(<see cref="AppSettings.DefaultRulesFor"/>, 기본 AnimationOptions)을 쓴다.
+/// 이미지 세트에 귀속된 설정: 그 세트가 사용 중일 때 적용되는 애니메이션 옵션, 키 매핑 규칙, 프레임 효과.
+/// 항목이 null이면 세트 기본값(<see cref="AppSettings.DefaultRulesFor"/>, 기본 AnimationOptions, 효과 없음)을 쓴다.
 /// </summary>
-public sealed record SetProfile(AnimationOptions? Animation = null, IReadOnlyList<KeyRule>? Rules = null);
+public sealed record SetProfile(
+    AnimationOptions? Animation = null,
+    IReadOnlyList<KeyRule>? Rules = null,
+    IReadOnlyList<FrameEffect>? Effects = null);
 
 /// <summary>
 /// 앱 전체 설정. 불변 레코드이며 변경은 with 식으로 새 인스턴스를 만든다.
@@ -138,11 +142,16 @@ public sealed record AppSettings
 
     public IReadOnlyList<KeyRule> RulesOf(string setName) => ProfileOf(setName)?.Rules ?? DefaultRulesFor(setName);
 
+    public IReadOnlyList<FrameEffect> EffectsOf(string setName) => ProfileOf(setName)?.Effects ?? Array.Empty<FrameEffect>();
+
     /// <summary>사용 중인 세트에 적용되는 애니메이션 옵션.</summary>
     public AnimationOptions EffectiveAnimation => AnimationOf(DefaultFrameSet);
 
     /// <summary>사용 중인 세트에 적용되는 키 매핑 규칙.</summary>
     public IReadOnlyList<KeyRule> EffectiveRules => RulesOf(DefaultFrameSet);
+
+    /// <summary>사용 중인 세트의 프레임 효과.</summary>
+    public IReadOnlyList<FrameEffect> EffectiveEffects => EffectsOf(DefaultFrameSet);
 
     /// <summary>사용 중인 세트의 프로필에 애니메이션 옵션을 기록한다.</summary>
     public AppSettings WithEffectiveAnimation(AnimationOptions animation) =>
@@ -151,6 +160,10 @@ public sealed record AppSettings
     /// <summary>사용 중인 세트의 프로필에 규칙을 기록한다.</summary>
     public AppSettings WithEffectiveRules(IReadOnlyList<KeyRule> rules) =>
         WithProfile(DefaultFrameSet, p => p with { Rules = rules });
+
+    /// <summary>사용 중인 세트의 프로필에 프레임 효과를 기록한다.</summary>
+    public AppSettings WithEffectiveEffects(IReadOnlyList<FrameEffect> effects) =>
+        WithProfile(DefaultFrameSet, p => p with { Effects = effects });
 
     /// <summary>
     /// 세트 이름이 바뀌면 프로필과 사용 중인 세트 참조도 따라가게 한다.
@@ -237,8 +250,13 @@ public sealed record AppSettings
                 Keys = (r.Keys ?? Array.Empty<string>()).Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).ToList(),
                 HoldMs = Math.Max(0, r.HoldMs),
                 FrameIndex = r.FrameIndex is < 0 ? null : r.FrameIndex,
+                // 규칙 효과는 프레임과 무관하게 키를 누른 동안 재생되므로 적용 프레임을 두지 않는다.
+                Effects = CleanEffects(r.Effects)?.Select(e => e with { Frames = null }).ToList() is { Count: > 0 } effects ? effects : null,
             })
             .ToList();
+
+    private static List<FrameEffect>? CleanEffects(IReadOnlyList<FrameEffect>? effects) =>
+        effects?.Where(e => e is not null).Select(e => e.Normalized()).ToList();
 
     private static IReadOnlyDictionary<string, SetProfile> CleanProfiles(IReadOnlyDictionary<string, SetProfile>? profiles)
     {
@@ -257,7 +275,8 @@ public sealed record AppSettings
 
             result[name.Trim()] = new SetProfile(
                 profile.Animation?.Normalized(),
-                profile.Rules is null ? null : CleanRules(profile.Rules));
+                profile.Rules is null ? null : CleanRules(profile.Rules),
+                CleanEffects(profile.Effects));
         }
 
         return result;
@@ -273,6 +292,7 @@ public sealed record AppSettings
             if (pa.Animation != pb.Animation) return false;
             if (pa.Rules is null != pb.Rules is null) return false;
             if (pa.Rules is not null && !RulesEqual(pa.Rules, pb.Rules!)) return false;
+            if (!FrameEffect.ListsEqual(pa.Effects, pb.Effects)) return false;
         }
 
         return true;
@@ -289,7 +309,8 @@ public sealed record AppSettings
             var x = a[i];
             var y = b[i];
             if (x.HoldMs != y.HoldMs || x.ResetIndex != y.ResetIndex
-                || x.FrameIndex != y.FrameIndex || !x.Keys.SequenceEqual(y.Keys))
+                || x.FrameIndex != y.FrameIndex || !x.Keys.SequenceEqual(y.Keys)
+                || !FrameEffect.ListsEqual(x.Effects, y.Effects))
             {
                 return false;
             }
