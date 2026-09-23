@@ -81,10 +81,10 @@ public sealed partial class RuleItemViewModel : ObservableObject
                 choices.Add(new FrameChoice(i, keyOnly ? $"{i + 1}번 프레임 (키 전용)" : $"{i + 1}번 프레임", frames[i]));
             }
 
-            // 세트가 아직 로드되지 않았거나 프레임이 줄었어도 저장된 선택을 잃지 않도록 자리표시 항목을 둔다.
-            for (var i = frames.Count; keepIndex is int k && i <= k; i++)
+            // 세트가 아직 로드되지 않았거나 프레임이 줄었어도 저장된 선택을 잃지 않도록 자리표시 항목을 하나 둔다.
+            if (keepIndex is int k && k >= frames.Count)
             {
-                choices.Add(new FrameChoice(i, $"{i + 1}번 프레임 (없음)", null));
+                choices.Add(new FrameChoice(k, $"{(long)k + 1}번 프레임 (없음)", null));
             }
 
             if (!choices.SequenceEqual(FrameChoices))
@@ -96,9 +96,7 @@ public sealed partial class RuleItemViewModel : ObservableObject
                 }
             }
 
-            SelectedFrame = keepIndex is int k2 && k2 >= 0 && k2 + 1 < FrameChoices.Count
-                ? FrameChoices[k2 + 1]
-                : FrameChoice.WholeSet;
+            SelectedFrame = FrameChoices.FirstOrDefault(c => c.Index is not null && c.Index == keepIndex) ?? FrameChoice.WholeSet;
         }
         finally
         {
@@ -150,7 +148,7 @@ public sealed partial class RuleItemViewModel : ObservableObject
 
         if (SelectedFrame?.Thumbnail is null && FrameIndex is int missing)
         {
-            Error = $"사용 중인 세트에 {missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다.";
+            Error = $"사용 중인 세트에 {(long)missing + 1}번 프레임이 없습니다. 마지막 프레임이 대신 표시됩니다.";
             return;
         }
 

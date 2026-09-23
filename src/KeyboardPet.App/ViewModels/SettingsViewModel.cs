@@ -140,10 +140,16 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     /// <param name="removedName">삭제된 세트의 이름. 그 세트에 귀속된 설정도 함께 지운다.</param>
     public void CommitFrameSets(string? removedName = null)
     {
-        // 편집 중 이름을 비운 세트는 이름이 다시 채워질 때까지 이전 이름으로 설정을 붙잡아 둔다.
+        // 이름을 비운 세트가 있으면 이름이 다시 채워질 때까지 저장을 미룬다. 그대로 저장하면 이름 없는 세트는
+        // 정규화에서 빠지고, 카드와 그 세트에 귀속된 설정이 함께 사라진다.
+        if (FrameSets.Any(f => string.IsNullOrWhiteSpace(f.Name)))
+        {
+            StatusMessage = "세트 이름을 입력하세요. 이름이 비어 있는 동안에는 세트 변경이 저장되지 않습니다.";
+            return;
+        }
+
         var renames = FrameSets
-            .Where(f => !string.IsNullOrWhiteSpace(f.Name)
-                        && !string.Equals(f.CommittedName, f.Name.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(f => !string.Equals(f.CommittedName, f.Name.Trim(), StringComparison.OrdinalIgnoreCase))
             .Select(f => (Old: f.CommittedName, New: f.Name.Trim()))
             .ToList();
 
@@ -155,7 +161,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             return next with { FrameSets = FrameSets.Select(f => f.ToSettings()).ToList() };
         });
 
-        foreach (var item in FrameSets.Where(f => !string.IsNullOrWhiteSpace(f.Name)))
+        foreach (var item in FrameSets)
         {
             item.CommittedName = item.Name.Trim();
         }
@@ -476,7 +482,6 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
             RefreshAvailableSetNames();
             DefaultFrameSet = s.DefaultFrameSet;
-            RefreshProfileTargetText();
 
             var currentRules = Rules.Select(r => r.ToRule()).ToList();
             var effectiveRules = s.EffectiveRules;

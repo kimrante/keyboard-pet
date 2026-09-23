@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace KeyboardPet.Core.Settings;
@@ -11,14 +12,36 @@ public static class SettingsMigration
     /// <summary>v1까지 있던 내장 세트. v2에서는 jump 이미지만 '예시' 세트로 남았다.</summary>
     private static readonly string[] RemovedBuiltInSets = { "idle", "jump", "typing" };
 
+    /// <summary>
+    /// 파일이 현재 버전보다 오래되어 변환이 필요한지. 최상위가 객체가 아니면 JsonException.
+    /// 현재 버전 파일은 기존처럼 바로 역직렬화하도록(중복 속성 등에 관대하게) 여기서 가려낸다.
+    /// </summary>
+    public static bool NeedsMigration(string json, JsonDocumentOptions options)
+    {
+        using var document = JsonDocument.Parse(json, options);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("설정 파일이 객체가 아닙니다.");
+        }
+
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (string.Equals(property.Name, "version", StringComparison.OrdinalIgnoreCase))
+            {
+                return !(property.Value.TryGetInt32(out var version) && version >= AppSettings.CurrentVersion);
+            }
+        }
+
+        return true;
+    }
+
     public static void Migrate(JsonObject root)
     {
         if (ReadVersion(root) < 2)
         {
             MigrateV1ToV2(root);
+            root["version"] = 2;
         }
-
-        root["version"] = AppSettings.CurrentVersion;
     }
 
     /// <summary>
@@ -41,9 +64,8 @@ public static class SettingsMigration
                 : name;
         }
 
-        var defaultSet = Str(root["defaultFrameSet"]) is { } d && !string.IsNullOrWhiteSpace(d)
-            ? MapName(d)
-            : AppSettings.BuiltInDefaultSet;
+        var oldDefault = Str(root["defaultFrameSet"])?.Trim();
+        var defaultSet = string.IsNullOrEmpty(oldDefault) ? AppSettings.BuiltInDefaultSet : MapName(oldDefault);
 
         var globalAnimation = root["animation"];
         var globalRules = root["rules"] as JsonArray;
@@ -53,10 +75,13 @@ public static class SettingsMigration
         var profiles = new JsonObject();
         foreach (var set in targets)
         {
-            // 같은 세트로 매핑되는 옛 프로필이 여럿이면(예: idle, jump) 세트 이름과 정확히 같은 것을 우선한다.
+            // 같은 세트로 매핑되는 옛 프로필이 여럿이면(예: idle, typing) 세트 이름과 정확히 같은 것,
+            // 그다음 v1에서 실제로 쓰던 기본 세트의 것을 우선한다.
             var oldProfile = oldProfiles
                 .Where(p => !string.IsNullOrWhiteSpace(p.Key) && string.Equals(MapName(p.Key), set, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(p => string.Equals(p.Key.Trim(), set, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .OrderBy(p => string.Equals(p.Key.Trim(), set, StringComparison.OrdinalIgnoreCase) ? 0
+                    : string.Equals(p.Key.Trim(), oldDefault, StringComparison.OrdinalIgnoreCase) ? 1
+                    : 2)
                 .Select(p => p.Value as JsonObject)
                 .FirstOrDefault(p => p is not null);
 
@@ -83,7 +108,10 @@ public static class SettingsMigration
         root.Remove("rules");
     }
 
-    /// <summary>세트 <paramref name="set"/>를 가리키던 규칙만 남긴다. 남는 규칙이 없으면 null(세트 기본 규칙 사용).</summary>
+    /// <summary>
+    /// 세트 <paramref name="set"/>를 가리키던 규칙만 남긴다. 규칙 목록이 없거나 v1 기본 규칙 그대로면 null(세트 기본 규칙 사용).
+    /// 사용자가 규칙을 편집했었다면 남는 규칙이 없더라도 빈 목록으로 두어 샘플 규칙이 되살아나지 않게 한다.
+    /// </summary>
     private static JsonArray? ConvertRules(JsonArray? rules, string set, Func<string, string> mapName)
     {
         if (rules is null || IsV1DefaultRules(rules))
@@ -102,7 +130,7 @@ public static class SettingsMigration
             }
         }
 
-        return kept.Count == 0 ? null : kept;
+        return kept;
     }
 
     /// <summary>v1 기본 규칙(Enter → jump, * → typing)을 손대지 않은 경우. 예시 세트의 새 기본 규칙으로 대체한다.</summary>
@@ -114,10 +142,20 @@ public static class SettingsMigration
     private static bool IsRule(JsonNode? node, string key, string set) =>
         node is JsonObject o
         && string.Equals(Str(o["frameSet"])?.Trim(), set, StringComparison.OrdinalIgnoreCase)
-        && o["keys"] is JsonArray keys && keys.Count == 1 && Str(keys[0])?.Trim() == key;
+        && o["keys"] is JsonArray keys && keys.Count == 1
+        && string.Equals(Str(keys[0])?.Trim(), key, StringComparison.OrdinalIgnoreCase)
+        && o["frameIndex"] is null
+        && Int(o["holdMs"]) == (key == "*" ? 600 : 800)
+        && Bool(o["resetIndex"]) == (key != "*");
 
-    private static int ReadVersion(JsonObject root) =>
-        root["version"] is JsonValue v && v.TryGetValue<int>(out var version) ? version : 0;
+    private static int ReadVersion(JsonObject root) => Int(root["version"]) ?? 0;
+
+    private static int? Int(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
+
+    /// <summary>v1 KeyRule의 기본값(resetIndex = true)을 반영해 읽는다.</summary>
+    private static bool Bool(JsonNode? node) =>
+        node is not JsonValue v || !v.TryGetValue<bool>(out var b) || b;
 
     private static string? Str(JsonNode? node) =>
         node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;

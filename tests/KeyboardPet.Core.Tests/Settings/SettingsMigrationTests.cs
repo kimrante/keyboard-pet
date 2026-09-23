@@ -122,19 +122,94 @@ public sealed class SettingsMigrationTests : IDisposable
     }
 
     [Fact]
-    public void RulesPointingOnlyElsewhere_LeaveSetWithDefaults()
+    public void RulesPointingOnlyElsewhere_LeaveSetWithoutRules_EvenForExample()
     {
         var s = LoadJson("""
             {
               "version": 1,
-              "defaultFrameSet": "cat",
-              "frameSets": [ { "name": "cat", "folder": "C:\\cat" } ],
-              "rules": [ { "keys": ["A"], "frameSet": "dog" } ]
+              "defaultFrameSet": "idle",
+              "rules": [ { "keys": ["A"], "frameSet": "cat", "holdMs": 100 } ]
             }
             """);
 
+        Assert.Equal(AppSettings.ExampleSetName, s.DefaultFrameSet);
+        Assert.Empty(s.EffectiveRules);     // 편집했던 규칙이 있었으면 샘플 규칙을 되살리지 않는다
+    }
+
+    [Fact]
+    public void DeliberatelyEmptyRules_StayEmpty()
+    {
+        var s = LoadJson("""{ "version": 1, "defaultFrameSet": "idle", "rules": [] }""");
+
         Assert.Empty(s.EffectiveRules);
-        Assert.Null(s.ProfileOf("cat"));    // 옮길 값이 없으면 프로필도 만들지 않는다
+    }
+
+    [Fact]
+    public void CustomizedV1DefaultRules_AreNotTreatedAsDefaults()
+    {
+        var s = LoadJson("""
+            {
+              "version": 1,
+              "defaultFrameSet": "jump",
+              "rules": [
+                { "keys": ["Enter"], "frameSet": "jump", "holdMs": 2000, "resetIndex": true, "frameIndex": 1 },
+                { "keys": ["*"], "frameSet": "typing", "holdMs": 600, "resetIndex": false }
+              ]
+            }
+            """);
+
+        // jump·typing 모두 예시로 바뀌므로 두 규칙이 예시 세트에 남는다(첫 규칙의 편집 내용 유지).
+        Assert.Equal(2, s.EffectiveRules.Count);
+        Assert.Equal(2000, s.EffectiveRules[0].HoldMs);
+        Assert.Equal(1, s.EffectiveRules[0].FrameIndex);
+    }
+
+    [Fact]
+    public void V1DefaultRules_MatchCaseInsensitively()
+    {
+        var s = LoadJson("""
+            {
+              "version": 1,
+              "rules": [
+                { "keys": ["enter"], "frameSet": "JUMP", "holdMs": 800, "resetIndex": true },
+                { "keys": ["*"], "frameSet": "typing", "holdMs": 600, "resetIndex": false }
+              ]
+            }
+            """);
+
+        Assert.True(AppSettings.RulesEqual(AppSettings.ExampleRules, s.EffectiveRules));
+    }
+
+    [Fact]
+    public void SeveralOldBuiltInProfiles_PreferTheOldDefaultSet()
+    {
+        var s = LoadJson("""
+            {
+              "version": 1,
+              "defaultFrameSet": "typing",
+              "setProfiles": {
+                "idle": { "animation": { "mode": "Adaptive" } },
+                "typing": { "animation": { "mode": "Fixed" } }
+              }
+            }
+            """);
+
+        Assert.Equal(FrameMode.Fixed, s.EffectiveAnimation.Mode);
+    }
+
+    [Fact]
+    public void V1File_WithDuplicateKeys_IsTreatedAsCorrupt_ButV2DuplicatesAreTolerated()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{ "version": 2, "isTopmost": true, "isTopmost": false }""");
+        var v2 = new SettingsStore(FilePath);
+        Assert.False(v2.Load().IsTopmost);
+        Assert.Null(v2.LastLoadError);
+
+        File.WriteAllText(FilePath, """{ "version": 1, "isTopmost": true, "isTopmost": false }""");
+        var v1 = new SettingsStore(FilePath);
+        v1.Load();
+        Assert.NotNull(v1.LastLoadError);
     }
 
     [Fact]

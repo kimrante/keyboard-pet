@@ -54,23 +54,28 @@ public sealed class SettingsStore
         try
         {
             var json = File.ReadAllText(FilePath);
-            if (JsonNode.Parse(json, NodeOptions, DocumentOptions) is not JsonObject root)
-            {
-                throw new JsonException("설정 파일이 비어 있거나 객체가 아닙니다.");
-            }
+            var loaded = SettingsMigration.NeedsMigration(json, DocumentOptions)
+                ? MigrateAndDeserialize(json)
+                : JsonSerializer.Deserialize<AppSettings>(json, JsonOptions);
 
-            SettingsMigration.Migrate(root);
-            var loaded = root.Deserialize<AppSettings>(JsonOptions)
-                         ?? throw new JsonException("설정 파일이 비어 있습니다.");
-            return loaded.Normalized();
+            return (loaded ?? throw new JsonException("설정 파일이 비어 있습니다.")).Normalized();
         }
+        // ArgumentException: 옛 버전 파일을 JSON 트리로 읽을 때 속성 이름이 중복된 경우(직접 편집한 파일).
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException
-                                       or ArgumentException or InvalidOperationException)
+                                       or ArgumentException)
         {
             LastLoadError = ex.Message;
             TryQuarantineCorruptFile();
             return AppSettings.Default;
         }
+    }
+
+    private static AppSettings? MigrateAndDeserialize(string json)
+    {
+        var root = JsonNode.Parse(json, NodeOptions, DocumentOptions) as JsonObject
+                   ?? throw new JsonException("설정 파일이 객체가 아닙니다.");
+        SettingsMigration.Migrate(root);
+        return root.Deserialize<AppSettings>(JsonOptions);
     }
 
     public void Save(AppSettings settings)
