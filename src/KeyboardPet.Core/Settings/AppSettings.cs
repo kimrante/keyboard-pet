@@ -1,5 +1,6 @@
 using KeyboardPet.Core.Animation;
 using KeyboardPet.Core.Effects;
+using KeyboardPet.Core.Input;
 using KeyboardPet.Core.Rules;
 
 namespace KeyboardPet.Core.Settings;
@@ -110,6 +111,15 @@ public sealed record AppSettings
 
     /// <summary>키를 길게 눌러 발생하는 반복 입력도 타수·규칙에 반영할지.</summary>
     public bool CountAutoRepeat { get; init; }
+
+    /// <summary>마우스 클릭(터치 탭 포함)도 입력으로 셀지. 키 매핑 규칙에는 쓰이지 않는다.</summary>
+    public bool CountMouseClicks { get; init; }
+
+    /// <summary>펜 입력도 입력으로 셀지. 펜을 대고 있는 동안에는 <see cref="PenRepeatMs"/>마다 한 번씩 센다.</summary>
+    public bool CountPenInput { get; init; }
+
+    /// <summary>펜을 누르고 있는 동안 입력 한 번으로 치는 간격(ms).</summary>
+    public int PenRepeatMs { get; init; } = PenHoldRepeater.DefaultIntervalMs;
 
     public bool StartWithWindows { get; init; }
 
@@ -226,6 +236,7 @@ public sealed record AppSettings
     {
         Version = CurrentVersion,
         Window = (Window ?? new WindowSettings()).Normalized(),
+        PenRepeatMs = Math.Clamp(PenRepeatMs, PenHoldRepeater.MinIntervalMs, PenHoldRepeater.MaxIntervalMs),
         DefaultFrameSet = string.IsNullOrWhiteSpace(DefaultFrameSet) ? BuiltInDefaultSet : DefaultFrameSet.Trim(),
         FrameSets = (FrameSets ?? Array.Empty<FrameSetSettings>())
             .Where(f => f is not null && !string.IsNullOrWhiteSpace(f.Name) && !string.IsNullOrWhiteSpace(f.Folder))

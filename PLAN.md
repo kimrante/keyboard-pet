@@ -280,6 +280,7 @@ RuleMatcher  KeystrokeScheduler  타수 카운터
 | M13 ✅ 완료(2026-09-23) | 움직임 효과 | Core Effects(FrameEffect 8종·강도·속도·적용 프레임, EffectTransform 합성, EffectMixer 프레임별 시작 시각·규칙 활성화 재시작, EffectPadding), 세트 프로필 effects·규칙 effects, EffectService(CompositionTarget.Rendering, 효과 없으면 정지), 펫 창 여백·변형(저장 위치는 이미지 기준), 설정 창 효과 탭·규칙 효과, --screenshot/--data-dir 무인 실행과 CI 스크린샷 | 0.5일 |
 | R4 ✅ 완료(2026-09-23) | 성능·메모리 리뷰 3회 | 설정 창 DI 스코프 누수, 사용 중인 세트만 디코딩, 공유 썸네일, 백그라운드 저장, 유휴 타이머 제거(Topmost WinEvent, Adaptive 정지), 숨김·잠금 시 정지, 렌더 캐시, 훅 전달 경량화, 첫 화면 우선 시작, 런타임 옵션 | 0.5일 |
 | R5 ✅ 완료(2026-09-27) | 코드 리뷰 2회 · 성능 최적화 1회 | 저장 루프 종료 경쟁(마지막 변경 누락), 드롭 가져오기 부분 실패 시 카드·설정 불일치, --data-dir이 앱 관리 세트 폴더에 미적용, 메뉴의 선택된 모드 재클릭 시 체크 사라짐, crash.log 크기 제한. 썸네일은 설정 창이 열려 있을 때만 생성, 진행 중인 썸네일 읽기 중복 제거 | 0.5일 |
+| M14 ✅ 완료(2026-09-27) | 마우스 클릭·펜 입력 | 설정 CountMouseClicks/CountPenInput/PenRepeatMs(기본 꺼짐), 전용 스레드의 WH_MOUSE_LL(버튼 누름만, dwExtraInfo 서명으로 펜·터치 구분) + 디지타이저 Raw Input(팁 스위치) → PenContactTracker로 병합, PenHoldRepeater가 누르고 있는 동안 간격마다 입력 1회. 키 매핑 규칙에는 쓰지 않음 | 0.5일 |
 | **합계** | | | **약 7일** |
 
 각 마일스톤 종료 시 실행 가능한 상태를 유지한다(항상 동작하는 빌드).

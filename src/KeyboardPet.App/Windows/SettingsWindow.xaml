@@ -247,6 +247,23 @@
                     <GroupBox Header="입력">
                         <StackPanel>
                             <CheckBox Content="키를 길게 누를 때의 반복 입력도 타수로 계산" IsChecked="{Binding CountAutoRepeat}" />
+                            <CheckBox Content="마우스 클릭도 입력으로 계산 (터치 탭 포함)" IsChecked="{Binding CountMouseClicks}" Margin="0,8,0,0" />
+                            <CheckBox Content="펜 입력도 입력으로 계산" IsChecked="{Binding CountPenInput}" Margin="0,8,0,0" />
+
+                            <Grid Style="{StaticResource Row}" Margin="24,6,0,0" IsEnabled="{Binding CountPenInput}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="누르고 있을 때 간격" />
+                                <Slider Grid.Column="1" Minimum="30" Maximum="1000" TickFrequency="10" IsSnapToTickEnabled="True"
+                                        Value="{Binding PenRepeatMs}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Style="{StaticResource RowValue}" Text="{Binding PenRepeatMs, StringFormat={}{0} ms}" />
+                            </Grid>
+
+                            <TextBlock Style="{StaticResource Hint}"
+                                       Text="클릭과 펜 입력은 키 입력처럼 타수와 애니메이션에 반영됩니다(키 매핑 규칙에는 쓰이지 않음). 펜을 화면에 대고 있는 동안에는 위 간격마다 입력 한 번으로 계산해 프레임이 계속 넘어갑니다. 버튼을 누른 사실만 받고 위치나 클릭한 창은 읽지 않습니다." />
                         </StackPanel>
                     </GroupBox>
 

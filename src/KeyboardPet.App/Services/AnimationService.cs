@@ -112,6 +112,11 @@ public sealed class AnimationService : IDisposable
         }
     }
 
+    /// <summary>
+    /// 키가 아닌 입력 한 번(마우스 클릭, 펜 누름·누르고 있는 동안의 반복). 타수 스케줄러만 움직이고 키 매핑 규칙에는 넘기지 않는다.
+    /// </summary>
+    public void OnInputStroke() => _engine.OnKeystroke();
+
     /// <summary>로드된 세트의 디코딩 프레임(설정 창의 프레임 선택 미리보기용). 없으면 null.</summary>
     public IReadOnlyList<BitmapSource>? TryGetFrames(string name) =>
         _sets.TryGetValue(name, out var set) ? set.Frames : null;

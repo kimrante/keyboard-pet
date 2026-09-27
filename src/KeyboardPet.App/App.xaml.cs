@@ -42,7 +42,7 @@ public partial class App : Application
     public static IServiceProvider Services =>
         ((App)Current)._services ?? throw new InvalidOperationException("DI 컨테이너가 아직 초기화되지 않았습니다.");
 
-    /// <summary>실행 인수. --no-tray: 트레이 아이콘 생략, --no-hook: 키보드 훅 생략 (문제 원인 분리용).</summary>
+    /// <summary>실행 인수. --no-tray: 트레이 아이콘 생략, --no-hook: 키보드·마우스 훅 생략 (문제 원인 분리용).</summary>
     private static bool HasArg(string name) =>
         Environment.GetCommandLineArgs().Skip(1).Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
@@ -112,12 +112,15 @@ public partial class App : Application
 
         if (HasArg("--no-hook"))
         {
-            DiagnosticsLog.Trace("--no-hook: 키보드 훅 생략");
+            DiagnosticsLog.Trace("--no-hook: 키보드·마우스 훅 생략");
         }
         else
         {
             RunStep("키보드 입력 감지", () => _services.GetRequiredService<KeyboardInputService>().Start(), fatal: false,
                 userMessage: "키보드 입력 감지를 시작하지 못했습니다. 펫은 표시되지만 타이핑에 반응하지 않습니다.\n앱을 다시 실행해 보세요.");
+
+            // 설정에서 켠 경우에만 훅을 설치한다(기본은 꺼짐). 실패해도 키보드 입력은 그대로 동작한다.
+            RunStep("마우스·펜 입력 감지", () => _services.GetRequiredService<PointerInputService>().Start(), fatal: false);
         }
 
         // 펫이 먼저 보이도록, 첫 화면을 그리는 데 필요 없는 일(트레이 아이콘, 자동 실행 레지스트리, 안내 메시지)은
@@ -241,6 +244,8 @@ public partial class App : Application
         // Input
         services.AddSingleton<IKeyboardSource>(_ => new LowLevelKeyboardHook(Dispatcher));
         services.AddSingleton<KeyboardInputService>();
+        services.AddSingleton<IPointerSource>(_ => new PointerInputHook(Dispatcher));
+        services.AddSingleton<PointerInputService>();
 
         // Animation
         services.AddSingleton<ImageCache>();
