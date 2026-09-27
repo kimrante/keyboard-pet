@@ -1,4 +1,5 @@
 using KeyboardPet.Core.Animation;
+using KeyboardPet.Core.Input;
 using KeyboardPet.Core.Rules;
 using KeyboardPet.Core.Settings;
 
@@ -234,6 +235,32 @@ public sealed class SettingsStoreTests : IDisposable
 
         Assert.NotNull(store.LastLoadError);
         Assert.Equal(AppSettings.BuiltInDefaultSet, settings.DefaultFrameSet);
+    }
+
+    [Fact]
+    public void PointerInputOptions_RoundTrip_AndDefaultOff()
+    {
+        var store = new SettingsStore(FilePath);
+        Assert.False(store.Load().CountMouseClicks);
+        Assert.False(store.Load().CountPenInput);
+
+        store.Save(new AppSettings { CountMouseClicks = true, CountPenInput = true, PenRepeatMs = 200 });
+        var loaded = new SettingsStore(FilePath).Load();
+
+        Assert.True(loaded.CountMouseClicks);
+        Assert.True(loaded.CountPenInput);
+        Assert.Equal(200, loaded.PenRepeatMs);
+    }
+
+    [Fact]
+    public void Load_PenRepeatMs_IsClampedAndDefaultsWhenMissing()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(FilePath, """{ "version": 2, "penRepeatMs": 1 }""");
+        Assert.Equal(PenHoldRepeater.MinIntervalMs, new SettingsStore(FilePath).Load().PenRepeatMs);
+
+        File.WriteAllText(FilePath, """{ "version": 2 }""");
+        Assert.Equal(PenHoldRepeater.DefaultIntervalMs, new SettingsStore(FilePath).Load().PenRepeatMs);
     }
 
     [Fact]

@@ -38,6 +38,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _showCounter;
     [ObservableProperty] private bool _startWithWindows;
     [ObservableProperty] private bool _countAutoRepeat;
+    [ObservableProperty] private bool _countMouseClicks;
+    [ObservableProperty] private bool _countPenInput;
+    [ObservableProperty] private int _penRepeatMs;
 
     // ── 애니메이션 ──
     [ObservableProperty]
@@ -138,6 +141,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public string PrivacyNotice =>
         "Keyboard Pet은 전역 키보드 훅으로 키 입력 '이벤트'만 받습니다. " +
         "어떤 키가 눌렸는지는 기록·저장·전송하지 않으며, 메모리에서도 규칙 매칭과 타수 계산에만 순간적으로 사용됩니다. " +
+        "마우스 클릭·펜 입력을 켜면 버튼을 누르고 뗀 사실만 받으며, 위치나 클릭한 창은 읽지 않습니다. " +
         "네트워크 통신을 하지 않습니다.";
 
     public void Dispose()
@@ -473,6 +477,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     partial void OnShowCounterChanged(bool value) => Push(s => s with { Window = s.Window with { ShowCounter = value } });
     partial void OnStartWithWindowsChanged(bool value) => Push(s => s with { StartWithWindows = value });
     partial void OnCountAutoRepeatChanged(bool value) => Push(s => s with { CountAutoRepeat = value });
+    partial void OnCountMouseClicksChanged(bool value) => Push(s => s with { CountMouseClicks = value });
+    partial void OnCountPenInputChanged(bool value) => Push(s => s with { CountPenInput = value });
+    partial void OnPenRepeatMsChanged(int value) => Push(s => s with { PenRepeatMs = value });
 
     // 애니메이션 옵션은 사용 중인 세트의 프로필에 기록된다.
     private void PushAnimation(Func<AnimationOptions, AnimationOptions> mutate) =>
@@ -539,6 +546,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             ShowCounter = s.Window.ShowCounter;
             StartWithWindows = s.StartWithWindows;
             CountAutoRepeat = s.CountAutoRepeat;
+            CountMouseClicks = s.CountMouseClicks;
+            CountPenInput = s.CountPenInput;
+            PenRepeatMs = s.PenRepeatMs;
 
             var animation = s.EffectiveAnimation;
             FrameMode = animation.Mode;
