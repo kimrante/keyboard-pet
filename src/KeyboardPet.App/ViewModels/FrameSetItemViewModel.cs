@@ -56,6 +56,9 @@ public sealed record IdleFrameChoice(FrameEntryViewModel? Entry, string Label)
 public sealed partial class FrameSetItemViewModel : ObservableObject
 {
     private int _thumbnailGeneration;
+
+    /// <summary>백그라운드에서 썸네일을 읽는 중인 타일. 끝나기 전에 다시 새로고침되어도 같은 파일을 또 읽지 않는다.</summary>
+    private readonly HashSet<FrameEntryViewModel> _thumbnailsLoading = new();
     private bool _refreshingIdleChoices;
     private string? _idleFrameName;
 
@@ -175,21 +178,31 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
 
     /// <summary>
     /// 이미지 파일들을 이 세트의 폴더로 복사해 프레임으로 추가한다(드래그앤드롭). 가져온 파일 수를 반환한다.
-    /// 같은 이름이 있으면 " (2)" 식으로 바꿔 저장한다.
+    /// 같은 이름이 있으면 " (2)" 식으로 바꿔 저장한다. 복사하지 못한 파일(잠김·권한 등)은 건너뛰고 <paramref name="failed"/>에 센다.
+    /// 일부가 실패해도 복사된 파일은 목록과 설정에 반영된다(폴더에만 있고 카드에는 없는 파일이 생기지 않도록).
     /// </summary>
-    public int ImportFiles(IEnumerable<string> sourcePaths)
+    public int ImportFiles(IEnumerable<string> sourcePaths, out int failed)
     {
         if (!Directory.Exists(Folder))
         {
             Directory.CreateDirectory(Folder);
         }
 
+        failed = 0;
         var imported = new List<string>();
         foreach (var source in sourcePaths.Where(p => File.Exists(p) && ImageCache.IsSupported(p)))
         {
-            var destination = UniqueDestination(Folder, Path.GetFileName(source));
-            File.Copy(source, destination);
-            imported.Add(Path.GetFileName(destination));
+            try
+            {
+                var destination = UniqueDestination(Folder, Path.GetFileName(source));
+                File.Copy(source, destination);
+                imported.Add(Path.GetFileName(destination));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed++;
+                DiagnosticsLog.Write("이미지 파일 복사 실패", ex);
+            }
         }
 
         if (imported.Count == 0)
@@ -296,6 +309,9 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
 
     private void LoadFrames(IReadOnlyList<string>? explicitFrames, IReadOnlyList<string>? animationFrames)
     {
+        // 타일을 새로 만들므로 진행 중인 썸네일 읽기의 결과는 쓰지 않는다.
+        _thumbnailGeneration++;
+        _thumbnailsLoading.Clear();
         Frames.Clear();
         var folderExists = Directory.Exists(Folder);
         var present = folderExists ? ImageCache.ListFolderFiles(Folder) : Array.Empty<string>();
@@ -342,20 +358,31 @@ public sealed partial class FrameSetItemViewModel : ObservableObject
     /// <summary>캐시에 없는 파일(사용 중이 아닌 세트 등)만 백그라운드에서 축소 디코딩한 뒤 UI 스레드에 반영한다.</summary>
     private void LoadThumbnailsAsync()
     {
-        var generation = ++_thumbnailGeneration;
+        var generation = _thumbnailGeneration;
         var folder = Folder;
         // 캐시에 있는 파일(사용 중인 세트)은 썸네일이 준비되는 대로 캐시에서 받으므로 디스크를 읽지 않는다.
-        var entries = Frames.Where(f => !f.IsMissing && f.Thumbnail is null && !Owner.IsFileCached(Path.Combine(folder, f.FileName))).ToList();
+        // 이미 읽는 중인 타일은 빼서, 설정 창이 열리자마자 이어지는 재로드·썸네일 완료 알림마다 같은 폴더를 다시 읽지 않게 한다.
+        var entries = Frames
+            .Where(f => !f.IsMissing && f.Thumbnail is null && !_thumbnailsLoading.Contains(f)
+                        && !Owner.IsFileCached(Path.Combine(folder, f.FileName)))
+            .ToList();
         if (entries.Count == 0)
         {
             return;
         }
 
+        _thumbnailsLoading.UnionWith(entries);
         var paths = entries.Select(e => Path.Combine(folder, e.FileName)).ToList();
         Task.Run(() => paths.Select(TryLoadThumbnail).ToList())
             .ContinueWith(task =>
             {
-                if (task.IsFaulted || generation != _thumbnailGeneration)
+                if (generation != _thumbnailGeneration)
+                {
+                    return;   // 타일이 새로 만들어졌다(LoadFrames가 목록도 비웠다)
+                }
+
+                _thumbnailsLoading.ExceptWith(entries);
+                if (task.IsFaulted)
                 {
                     return;
                 }

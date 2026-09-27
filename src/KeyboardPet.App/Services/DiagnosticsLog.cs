@@ -10,6 +10,8 @@ namespace KeyboardPet.App.Services;
 /// </summary>
 public static class DiagnosticsLog
 {
+    private const long MaxCrashLogBytes = 1024 * 1024;
+
     private static readonly object Sync = new();
     private static StreamWriter? _trace;
 
@@ -31,6 +33,13 @@ public static class DiagnosticsLog
             var line = $"[{DateTimeOffset.Now:O}] [{Environment.OSVersion}] {message}{Environment.NewLine}{Environment.NewLine}";
             lock (Sync)
             {
+                // 누적 로그가 끝없이 자라지 않도록, 일정 크기를 넘으면 한 세대만 crash.old.log로 넘기고 새로 쓴다.
+                var info = new FileInfo(FilePath);
+                if (info.Exists && info.Length > MaxCrashLogBytes)
+                {
+                    File.Move(FilePath, Path.Combine(Directory, "crash.old.log"), overwrite: true);
+                }
+
                 File.AppendAllText(FilePath, line);
             }
         }

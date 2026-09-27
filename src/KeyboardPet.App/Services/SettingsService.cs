@@ -35,6 +35,9 @@ public sealed class SettingsService : IDisposable
 
     public string FilePath => _store.FilePath;
 
+    /// <summary>앱이 관리하는 세트 폴더들의 부모(설정 파일 옆의 sets). --data-dir을 쓰면 그 아래로 바뀐다.</summary>
+    public string SetsRoot => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(FilePath)) ?? string.Empty, "sets");
+
     public string? LastLoadError { get; private set; }
 
     public string? LastSaveError { get; private set; }
@@ -51,7 +54,7 @@ public sealed class SettingsService : IDisposable
         if (!existed)
         {
             // 첫 실행: M3까지 쓰던 %AppData%\KeyboardPet\sets\<이름> 폴더가 있으면 세트 목록으로 가져온다.
-            Current = ImportLegacySetFolders(Current);
+            Current = ImportLegacySetFolders(Current, SetsRoot);
             _dirty = true;
             ScheduleSave();
         }
@@ -116,6 +119,7 @@ public sealed class SettingsService : IDisposable
 
     private void SaveLoop()
     {
+        var exited = false;
         try
         {
             while (true)
@@ -125,7 +129,11 @@ public sealed class SettingsService : IDisposable
                 {
                     if (_pending is null)
                     {
-                        return;   // 진입 판단과 같은 잠금 안에서 종료를 결정하므로 스냅샷이 남지 않는다(finally가 _saving을 내린다)
+                        // 종료 판단과 _saving 해제를 같은 잠금 안에서 한다. 잠금을 풀고 나서 내리면 그 사이 QueueSave가
+                        // "루프가 돌고 있다"고 보고 스냅샷만 남긴 채 돌아가, 마지막 변경이 저장되지 않는다.
+                        _saving = false;
+                        exited = true;
+                        return;
                     }
 
                     snapshot = _pending;
@@ -157,9 +165,13 @@ public sealed class SettingsService : IDisposable
         }
         finally
         {
-            lock (_gate)
+            if (!exited)
             {
-                _saving = false;
+                // 예기치 않은 예외로 빠져나온 경우에도 다음 QueueSave가 루프를 다시 띄울 수 있게 한다.
+                lock (_gate)
+                {
+                    _saving = false;
+                }
             }
         }
     }
@@ -170,9 +182,8 @@ public sealed class SettingsService : IDisposable
         _saveTimer.Start();
     }
 
-    private static AppSettings ImportLegacySetFolders(AppSettings settings)
+    private static AppSettings ImportLegacySetFolders(AppSettings settings, string root)
     {
-        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet", "sets");
         if (!Directory.Exists(root))
         {
             return settings;

@@ -41,12 +41,15 @@ public static class ContextMenuFactory
         return item;
     }
 
+    /// <summary>
+    /// 체크 표시는 뷰모델 상태만 따른다. IsCheckable을 켜면 클릭할 때 메뉴가 스스로 IsChecked를 뒤집는데,
+    /// 이미 선택된 모드를 다시 누르면 상태가 그대로라 바인딩이 되돌려 주지 않아 체크가 사라진 채 남는다.
+    /// </summary>
     private static MenuItem CheckableItem(string header, System.Windows.Input.ICommand command, ShellViewModel shell, string isCheckedPath)
     {
         var item = new MenuItem
         {
             Header = header,
-            IsCheckable = true,
             Command = command,
         };
         item.SetBinding(MenuItem.IsCheckedProperty, new Binding(isCheckedPath)
