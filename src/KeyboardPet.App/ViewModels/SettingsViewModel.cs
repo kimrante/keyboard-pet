@@ -25,6 +25,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly IKeyboardSource _keyboard;
     private bool _syncing;
     private RuleItemViewModel? _captureTarget;
+    private bool _disposed;
 
     /// <summary>저장이 미뤄진 동안 삭제된 세트 이름. 다음 저장 때 그 세트의 설정도 함께 지운다.</summary>
     private readonly List<string> _pendingRemovals = new();
@@ -81,6 +82,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         _settings.Changed += OnSettingsChanged;
         _animation.Reloaded += RefreshStatuses;
         _animation.ThumbnailsReady += RefreshStatuses;
+
+        // 썸네일은 설정 창이 열려 있을 때만 만든다. 완료 알림은 UI 스레드로 미뤄지므로 구독 뒤에 요청해도 놓치지 않는다.
+        _animation.AcquireThumbnails();
     }
 
     public ObservableCollection<FrameSetItemViewModel> FrameSets { get; } = new();
@@ -138,10 +142,17 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;   // 썸네일 요청 수를 두 번 내리지 않도록
+        }
+
+        _disposed = true;
         StopCapture();
         _settings.Changed -= OnSettingsChanged;
         _animation.Reloaded -= RefreshStatuses;
         _animation.ThumbnailsReady -= RefreshStatuses;
+        _animation.ReleaseThumbnails();
     }
 
     // ── 커밋 (항목 뷰모델이 호출) ──
@@ -272,7 +283,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static string UniqueManagedFolder(string name)
+    private string UniqueManagedFolder(string name)
     {
         var folder = Path.Combine(ManagedSetsRoot, name);
         for (var i = 2; Directory.Exists(folder); i++)
@@ -284,8 +295,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>앱이 관리하는 세트 폴더. 드래그앤드롭으로 가져온 파일은 이 아래에 복사된다.</summary>
-    public static string ManagedSetsRoot =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KeyboardPet", "sets");
+    public string ManagedSetsRoot => _settings.SetsRoot;
 
     /// <summary>
     /// 탐색기에서 끌어다 놓은 경로들을 가져온다.
@@ -302,10 +312,15 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             if (target is not null)
             {
                 var all = files.Concat(folders.SelectMany(f => ImageCache.ListFolderFiles(f).Select(n => Path.Combine(f, n)))).ToList();
-                var count = all.Count == 0 ? 0 : target.ImportFiles(all);
-                StatusMessage = count == 0
-                    ? "가져올 이미지 파일이 없습니다 (PNG/JPG/BMP/GIF)."
-                    : $"'{target.Name}' 세트에 프레임 {count}개를 추가했습니다.";
+                var failed = 0;
+                var count = all.Count == 0 ? 0 : target.ImportFiles(all, out failed);
+                StatusMessage = (count, failed) switch
+                {
+                    (0, 0) => "가져올 이미지 파일이 없습니다 (PNG/JPG/BMP/GIF).",
+                    (0, _) => $"이미지 {failed}개를 복사하지 못했습니다. 파일이 다른 프로그램에서 열려 있는지 확인하세요.",
+                    (_, 0) => $"'{target.Name}' 세트에 프레임 {count}개를 추가했습니다.",
+                    _ => $"'{target.Name}' 세트에 프레임 {count}개를 추가했습니다. {failed}개는 복사하지 못했습니다.",
+                };
                 return;
             }
 
@@ -349,9 +364,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         Directory.CreateDirectory(folder);
         var item = new FrameSetItemViewModel(this, new FrameSetSettings(name, folder));
         FrameSets.Add(item);
-        var count = item.ImportFiles(files);
+        var count = item.ImportFiles(files, out var failed);
         CommitFrameSets();
-        StatusMessage = $"이미지 {count}개를 복사해 '{name}' 세트를 만들었습니다 ({folder}).";
+        StatusMessage = failed == 0
+            ? $"이미지 {count}개를 복사해 '{name}' 세트를 만들었습니다 ({folder})."
+            : $"이미지 {count}개를 복사해 '{name}' 세트를 만들었습니다 ({folder}). {failed}개는 복사하지 못했습니다.";
     }
 
     [RelayCommand]

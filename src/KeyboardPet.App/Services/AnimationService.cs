@@ -40,6 +40,7 @@ public sealed class AnimationService : IDisposable
     private readonly Dictionary<string, FrameSetStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private KeyRuleController? _rules;
     private LoadedFrameSet _active = new(FrameSet.Empty, Array.Empty<BitmapSource>());
+    private int _thumbnailClients;
 
     public AnimationService(
         AnimationEngine engine,
@@ -241,7 +242,29 @@ public sealed class AnimationService : IDisposable
         // 이번 로드에서 쓰이지 않은 파일의 비트맵은 버려 메모리를 되돌린다.
         _cache.EndGeneration();
 
-        // 설정 창용 썸네일은 백그라운드에서 만든다(펫 표시에는 필요 없다).
+        if (_thumbnailClients > 0)
+        {
+            BuildThumbnails();
+        }
+    }
+
+    /// <summary>
+    /// 설정 창이 열려 있는 동안 썸네일을 준비하도록 요청한다(닫을 때 <see cref="ReleaseThumbnails"/>).
+    /// 펫 표시에는 썸네일이 필요 없으므로, 설정 창을 열지 않으면 시작·세트 재로드 때 만들지 않는다.
+    /// </summary>
+    public void AcquireThumbnails()
+    {
+        if (_thumbnailClients++ == 0)
+        {
+            BuildThumbnails();
+        }
+    }
+
+    public void ReleaseThumbnails() => _thumbnailClients = Math.Max(0, _thumbnailClients - 1);
+
+    /// <summary>캐시에서 썸네일이 없는 파일만 백그라운드에서 만들고, 끝나면 UI 스레드에서 ThumbnailsReady를 알린다.</summary>
+    private void BuildThumbnails()
+    {
         var context = System.Threading.SynchronizationContext.Current;
         _cache.BuildMissingThumbnailsAsync().ContinueWith(
             _ => ThumbnailsReady?.Invoke(),
